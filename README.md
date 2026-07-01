@@ -4,6 +4,8 @@
 
 Tab Out is a Chrome extension that replaces your new tab page with a dashboard of everything you have open. This fork also organizes your real Chrome tab strip with native tab groups, semantic rules, and manual custom groups that auto grouping will not touch.
 
+Forked from [zarazhangrui/tab-out](https://github.com/zarazhangrui/tab-out).
+
 No server. No account. No external API calls. Just a Chrome extension.
 
 ---
@@ -111,4 +113,4 @@ MIT
 
 ## Credits
 
-Original Tab Out by [Zara](https://x.com/zarazhangrui). This fork is extended and maintained by [link-king](https://github.com/link-king).
+Original project: [zarazhangrui/tab-out](https://github.com/zarazhangrui/tab-out), built by [Zara](https://x.com/zarazhangrui). This fork is extended and maintained by [link-king](https://github.com/link-king).
