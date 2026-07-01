@@ -2,9 +2,20 @@
 
 **Keep tabs on your tabs.**
 
-Tab Out is a Chrome extension that replaces your new tab page with a dashboard of everything you have open. Tabs are grouped by domain, with homepages (Gmail, X, LinkedIn, etc.) pulled into their own group. Close tabs with a satisfying swoosh + confetti.
+Tab Out is a Chrome extension that replaces your new tab page with a dashboard of everything you have open. This fork also organizes your real Chrome tab strip with native tab groups, semantic rules, and manual custom groups that auto grouping will not touch.
 
 No server. No account. No external API calls. Just a Chrome extension.
+
+---
+
+## This fork adds
+
+- **Auto groups in Chrome itself** not just on the Tab Out page. Tabs are placed into native Chrome tab groups in the tab strip.
+- **Semantic tab grouping** for AI, Dev, Docs, Work, Finance, Reading, Social, Video, and Shopping.
+- **Manual custom groups** for tabs you want to control yourself. Once a tab is added manually, auto grouping skips it.
+- **One-click group controls** to group now, expand all groups, collapse all groups, or open Tab Out in Chrome's side panel.
+- **Shared grouping rules** so the Tab Out dashboard and Chrome's native tab groups use the same names.
+- **Local override hooks** for personal homepage, semantic, and custom rules without changing the main extension code.
 
 ---
 
@@ -13,7 +24,7 @@ No server. No account. No external API calls. Just a Chrome extension.
 Send your coding agent (Claude Code, Codex, etc.) this repo and say **"install this"**:
 
 ```
-https://github.com/zarazhangrui/tab-out
+https://github.com/link-king/tab-out
 ```
 
 The agent will walk you through it. Takes about 1 minute.
@@ -46,7 +57,7 @@ The agent will walk you through it. Takes about 1 minute.
 **1. Clone the repo**
 
 ```bash
-git clone https://github.com/zarazhangrui/tab-out.git
+git clone https://github.com/link-king/tab-out.git
 ```
 
 **2. Load the Chrome extension**
