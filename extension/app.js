@@ -26,6 +26,63 @@
 // All open tabs — populated by fetchOpenTabs()
 let openTabs = [];
 
+const GROUPING_MESSAGES = {
+  GET_GROUPING_STATE: 'TAB_OUT_GET_GROUPING_STATE',
+  SET_AUTO_GROUPING: 'TAB_OUT_SET_AUTO_GROUPING',
+  GROUP_TABS_NOW: 'TAB_OUT_GROUP_TABS_NOW',
+  APPLY_MANUAL_GROUPING: 'TAB_OUT_APPLY_MANUAL_GROUPING',
+  SET_GROUPS_COLLAPSED: 'TAB_OUT_SET_GROUPS_COLLAPSED',
+  OPEN_SIDE_PANEL: 'TAB_OUT_OPEN_SIDE_PANEL',
+};
+
+function sendRuntimeMessage(message) {
+  return new Promise(resolve => {
+    try {
+      chrome.runtime.sendMessage(message, response => {
+        if (chrome.runtime.lastError) {
+          resolve({ ok: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+        resolve(response || { ok: false, error: 'No response from extension background.' });
+      });
+    } catch (err) {
+      resolve({ ok: false, error: err.message || String(err) });
+    }
+  });
+}
+
+async function getGroupingState() {
+  const response = await sendRuntimeMessage({ type: GROUPING_MESSAGES.GET_GROUPING_STATE });
+  return response && response.ok ? response.state : null;
+}
+
+async function getCurrentWindowId() {
+  try {
+    const currentWindow = await chrome.windows.getCurrent();
+    return currentWindow && currentWindow.id;
+  } catch {
+    return null;
+  }
+}
+
+async function renderGroupingControls() {
+  const toggle = document.getElementById('autoGroupToggle');
+  const label = document.getElementById('autoGroupLabel');
+  if (!toggle || !label) return;
+
+  const state = await getGroupingState();
+  if (!state) {
+    toggle.disabled = true;
+    label.textContent = 'Groups unavailable';
+    return;
+  }
+
+  toggle.disabled = false;
+  toggle.checked = state.settings.enabled === true;
+  label.textContent = state.settings.enabled ? 'Auto groups on' : 'Auto groups off';
+  label.title = `${state.stats.groupedTabs} grouped, ${state.stats.ungroupedTabs} ungrouped`;
+}
+
 /**
  * fetchOpenTabs()
  *
@@ -45,6 +102,8 @@ async function fetchOpenTabs() {
       title:    t.title,
       windowId: t.windowId,
       active:   t.active,
+      groupId:  t.groupId,
+      pinned:   t.pinned,
       // Flag Tab Out's own pages so we can detect duplicate new tabs
       isTabOut: t.url === newtabUrl || t.url === 'chrome://newtab/',
     }));
@@ -283,10 +342,99 @@ async function dismissSavedTab(id) {
   }
 }
 
+async function getManualGroupsState() {
+  const result = await chrome.storage.local.get(TAB_OUT_RULES.MANUAL_GROUPS_STORAGE_KEY);
+  return TAB_OUT_RULES.normalizeManualGroupsState(result[TAB_OUT_RULES.MANUAL_GROUPS_STORAGE_KEY]);
+}
+
+async function setManualGroupsState(nextState) {
+  const normalized = TAB_OUT_RULES.normalizeManualGroupsState(nextState);
+  await chrome.storage.local.set({ [TAB_OUT_RULES.MANUAL_GROUPS_STORAGE_KEY]: normalized });
+  manualGroupsState = normalized;
+  return normalized;
+}
+
+function makeManualGroupId(name) {
+  const slug = String(name || 'group')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 32) || 'group';
+  return `${slug}-${Date.now().toString(36)}`;
+}
+
+async function createManualGroup(name) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return null;
+
+  const state = await getManualGroupsState();
+  const now = new Date().toISOString();
+  const group = {
+    id: makeManualGroupId(trimmed),
+    name: trimmed.slice(0, 40),
+    color: TAB_OUT_RULES.colorFromString(trimmed),
+    createdAt: now,
+    updatedAt: now,
+  };
+  state.groups.push(group);
+  await setManualGroupsState(state);
+  return group;
+}
+
+async function assignTabToManualGroup(url, groupId) {
+  if (!url || !groupId) return null;
+
+  const state = await getManualGroupsState();
+  const group = state.groups.find(item => item.id === groupId);
+  if (!group) return null;
+  state.assignments[url] = groupId;
+  group.updatedAt = new Date().toISOString();
+  await setManualGroupsState(state);
+  return group;
+}
+
+async function removeTabFromManualGroup(url) {
+  if (!url) return;
+
+  const state = await getManualGroupsState();
+  delete state.assignments[url];
+  await setManualGroupsState(state);
+}
+
+async function deleteManualGroup(groupId) {
+  if (!groupId) return false;
+
+  const state = await getManualGroupsState();
+  const before = state.groups.length;
+  const affectedUrls = Object.entries(state.assignments)
+    .filter(([, assignedGroupId]) => assignedGroupId === groupId)
+    .map(([url]) => url);
+  state.groups = state.groups.filter(group => group.id !== groupId);
+  for (const [url, assignedGroupId] of Object.entries(state.assignments)) {
+    if (assignedGroupId === groupId) delete state.assignments[url];
+  }
+  await setManualGroupsState(state);
+  return {
+    deleted: state.groups.length !== before,
+    affectedUrls,
+  };
+}
+
 
 /* ----------------------------------------------------------------
    UI HELPERS
    ---------------------------------------------------------------- */
+
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char]));
+}
 
 /**
  * playCloseSound()
@@ -707,6 +855,7 @@ const ICONS = {
    IN-MEMORY STORE FOR OPEN-TAB GROUPS
    ---------------------------------------------------------------- */
 let domainGroups = [];
+let manualGroupsState = { groups: [], assignments: {} };
 
 
 /* ----------------------------------------------------------------
@@ -752,6 +901,73 @@ function checkTabOutDupes() {
   }
 }
 
+function getManualGroupCounts(state = manualGroupsState) {
+  const counts = {};
+  for (const group of state.groups || []) counts[group.id] = 0;
+  for (const groupId of Object.values(state.assignments || {})) {
+    if (typeof counts[groupId] === 'number') counts[groupId] += 1;
+  }
+  return counts;
+}
+
+function renderCustomGroupsPanel() {
+  const panel = document.getElementById('customGroupsPanel');
+  if (!panel) return;
+
+  const groups = manualGroupsState.groups || [];
+  const counts = getManualGroupCounts();
+  const groupRows = groups.length
+    ? `<div class="custom-group-list">
+        ${groups.map(group => `
+          <div class="custom-group-pill">
+            <span class="custom-group-dot color-${group.color || 'grey'}"></span>
+            <span class="custom-group-name">${escapeHtml(group.name)}</span>
+            <span class="custom-group-count">${counts[group.id] || 0}</span>
+            <button class="custom-group-delete" data-action="delete-manual-group" data-manual-group-id="${group.id}" title="Delete custom group">${ICONS.close}</button>
+          </div>`).join('')}
+      </div>`
+    : '';
+
+  panel.innerHTML = `
+    <div class="custom-group-create">
+      <input id="manualGroupNameInput" class="custom-group-input" type="text" maxlength="40" placeholder="New custom group">
+      <button class="action-btn" data-action="create-manual-group">${ICONS.tabs} Add group</button>
+    </div>
+    ${groupRows}`;
+}
+
+function closeManualGroupMenus() {
+  document.querySelectorAll('.manual-group-menu').forEach(menu => menu.remove());
+}
+
+function renderManualGroupMenu(anchor, tabUrl, tabTitle) {
+  closeManualGroupMenus();
+
+  const menu = document.createElement('div');
+  menu.className = 'manual-group-menu';
+
+  const safeUrl = (tabUrl || '').replace(/"/g, '&quot;');
+  const safeTitle = (tabTitle || tabUrl || '').replace(/"/g, '&quot;');
+  const groups = manualGroupsState.groups || [];
+  const groupButtons = groups.map(group => `
+    <button class="manual-group-menu-item" data-action="assign-manual-group" data-tab-url="${safeUrl}" data-manual-group-id="${group.id}">
+      <span class="custom-group-dot color-${group.color || 'grey'}"></span>
+      <span>${escapeHtml(group.name)}</span>
+    </button>`).join('');
+
+  menu.innerHTML = `
+    <div class="manual-group-menu-title">Custom group</div>
+    ${groupButtons || '<div class="manual-group-empty">Create a group first</div>'}
+    <div class="manual-group-menu-create">
+      <input class="manual-group-menu-input" type="text" maxlength="40" placeholder="New group">
+      <button class="manual-group-menu-add" data-action="create-and-assign-manual-group" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}">${ICONS.tabs}</button>
+    </div>`;
+
+  anchor.closest('.page-chip').appendChild(menu);
+  const input = menu.querySelector('.manual-group-menu-input');
+  if (input) input.focus();
+}
+
 
 /* ----------------------------------------------------------------
    OVERFLOW CHIPS ("+N more" expand button in domain cards)
@@ -765,6 +981,10 @@ function buildOverflowChips(hiddenTabs, urlCounts = {}) {
     const chipClass = count > 1 ? ' chip-has-dupes' : '';
     const safeUrl   = (tab.url || '').replace(/"/g, '&quot;');
     const safeTitle = label.replace(/"/g, '&quot;');
+    const manualGroupId = TAB_OUT_RULES.getManualGroupIdForUrl(tab.url, manualGroupsState);
+    const manualAction = manualGroupId
+      ? `<button class="chip-action chip-manual" data-action="remove-from-manual-group" data-tab-url="${safeUrl}" title="Remove from custom group">${ICONS.close}</button>`
+      : `<button class="chip-action chip-manual" data-action="open-manual-group-menu" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Add to custom group">${ICONS.tabs}</button>`;
     let domain = '';
     try { domain = new URL(tab.url).hostname; } catch {}
     const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : '';
@@ -772,6 +992,7 @@ function buildOverflowChips(hiddenTabs, urlCounts = {}) {
       ${faviconUrl ? `<img class="chip-favicon" src="${faviconUrl}" alt="" onerror="this.style.display='none'">` : ''}
       <span class="chip-text">${label}</span>${dupeTag}
       <div class="chip-actions">
+        ${manualAction}
         <button class="chip-action chip-save" data-action="defer-single-tab" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Save for later">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" /></svg>
         </button>
@@ -835,7 +1056,8 @@ function renderDomainCard(group) {
   const extraCount  = uniqueTabs.length - visibleTabs.length;
 
   const pageChips = visibleTabs.map(tab => {
-    let label = cleanTitle(smartTitle(stripTitleNoise(tab.title || ''), tab.url), group.domain);
+    const titleHostname = group.isSemantic || group.isCustom || group.isManual || isLanding ? '' : group.domain;
+    let label = cleanTitle(smartTitle(stripTitleNoise(tab.title || ''), tab.url), titleHostname);
     // For localhost tabs, prepend port number so you can tell projects apart
     try {
       const parsed = new URL(tab.url);
@@ -846,6 +1068,10 @@ function renderDomainCard(group) {
     const chipClass = count > 1 ? ' chip-has-dupes' : '';
     const safeUrl   = (tab.url || '').replace(/"/g, '&quot;');
     const safeTitle = label.replace(/"/g, '&quot;');
+    const manualGroupId = TAB_OUT_RULES.getManualGroupIdForUrl(tab.url, manualGroupsState);
+    const manualAction = manualGroupId
+      ? `<button class="chip-action chip-manual" data-action="remove-from-manual-group" data-tab-url="${safeUrl}" title="Remove from custom group">${ICONS.close}</button>`
+      : `<button class="chip-action chip-manual" data-action="open-manual-group-menu" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Add to custom group">${ICONS.tabs}</button>`;
     let domain = '';
     try { domain = new URL(tab.url).hostname; } catch {}
     const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : '';
@@ -853,6 +1079,7 @@ function renderDomainCard(group) {
       ${faviconUrl ? `<img class="chip-favicon" src="${faviconUrl}" alt="" onerror="this.style.display='none'">` : ''}
       <span class="chip-text">${label}</span>${dupeTag}
       <div class="chip-actions">
+        ${manualAction}
         <button class="chip-action chip-save" data-action="defer-single-tab" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Save for later">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" /></svg>
         </button>
@@ -1025,122 +1252,23 @@ async function renderStaticDashboard() {
   const dateEl     = document.getElementById('dateDisplay');
   if (greetingEl) greetingEl.textContent = getGreeting();
   if (dateEl)     dateEl.textContent     = getDateDisplay();
+  await renderGroupingControls();
 
   // --- Fetch tabs ---
   await fetchOpenTabs();
   const realTabs = getRealTabs();
+  manualGroupsState = await getManualGroupsState();
+  renderCustomGroupsPanel();
 
-  // --- Group tabs by domain ---
-  // Landing pages (Gmail inbox, Twitter home, etc.) get their own special group
-  // so they can be closed together without affecting content tabs on the same domain.
-  const LANDING_PAGE_PATTERNS = [
-    { hostname: 'mail.google.com', test: (p, h) =>
-        !h.includes('#inbox/') && !h.includes('#sent/') && !h.includes('#search/') },
-    { hostname: 'x.com',               pathExact: ['/home'] },
-    { hostname: 'www.linkedin.com',    pathExact: ['/'] },
-    { hostname: 'github.com',          pathExact: ['/'] },
-    { hostname: 'www.youtube.com',     pathExact: ['/'] },
-    // Merge personal patterns from config.local.js (if it exists)
-    ...(typeof LOCAL_LANDING_PAGE_PATTERNS !== 'undefined' ? LOCAL_LANDING_PAGE_PATTERNS : []),
-  ];
-
-  function isLandingPage(url) {
-    try {
-      const parsed = new URL(url);
-      return LANDING_PAGE_PATTERNS.some(p => {
-        // Support both exact hostname and suffix matching (for wildcard subdomains)
-        const hostnameMatch = p.hostname
-          ? parsed.hostname === p.hostname
-          : p.hostnameEndsWith
-            ? parsed.hostname.endsWith(p.hostnameEndsWith)
-            : false;
-        if (!hostnameMatch) return false;
-        if (p.test)       return p.test(parsed.pathname, url);
-        if (p.pathPrefix) return parsed.pathname.startsWith(p.pathPrefix);
-        if (p.pathExact)  return p.pathExact.includes(parsed.pathname);
-        return parsed.pathname === '/';
-      });
-    } catch { return false; }
-  }
-
-  domainGroups = [];
-  const groupMap    = {};
-  const landingTabs = [];
-
-  // Custom group rules from config.local.js (if any)
-  const customGroups = typeof LOCAL_CUSTOM_GROUPS !== 'undefined' ? LOCAL_CUSTOM_GROUPS : [];
-
-  // Check if a URL matches a custom group rule; returns the rule or null
-  function matchCustomGroup(url) {
-    try {
-      const parsed = new URL(url);
-      return customGroups.find(r => {
-        const hostMatch = r.hostname
-          ? parsed.hostname === r.hostname
-          : r.hostnameEndsWith
-            ? parsed.hostname.endsWith(r.hostnameEndsWith)
-            : false;
-        if (!hostMatch) return false;
-        if (r.pathPrefix) return parsed.pathname.startsWith(r.pathPrefix);
-        return true; // hostname matched, no path filter
-      }) || null;
-    } catch { return null; }
-  }
-
-  for (const tab of realTabs) {
-    try {
-      if (isLandingPage(tab.url)) {
-        landingTabs.push(tab);
-        continue;
-      }
-
-      // Check custom group rules first (e.g. merge subdomains, split by path)
-      const customRule = matchCustomGroup(tab.url);
-      if (customRule) {
-        const key = customRule.groupKey;
-        if (!groupMap[key]) groupMap[key] = { domain: key, label: customRule.groupLabel, tabs: [] };
-        groupMap[key].tabs.push(tab);
-        continue;
-      }
-
-      let hostname;
-      if (tab.url && tab.url.startsWith('file://')) {
-        hostname = 'local-files';
-      } else {
-        hostname = new URL(tab.url).hostname;
-      }
-      if (!hostname) continue;
-
-      if (!groupMap[hostname]) groupMap[hostname] = { domain: hostname, tabs: [] };
-      groupMap[hostname].tabs.push(tab);
-    } catch {
-      // Skip malformed URLs
-    }
-  }
-
-  if (landingTabs.length > 0) {
-    groupMap['__landing-pages__'] = { domain: '__landing-pages__', tabs: landingTabs };
-  }
-
-  // Sort: landing pages first, then domains from landing page sites, then by tab count
-  // Collect exact hostnames and suffix patterns for priority sorting
-  const landingHostnames = new Set(LANDING_PAGE_PATTERNS.map(p => p.hostname).filter(Boolean));
-  const landingSuffixes = LANDING_PAGE_PATTERNS.map(p => p.hostnameEndsWith).filter(Boolean);
-  function isLandingDomain(domain) {
-    if (landingHostnames.has(domain)) return true;
-    return landingSuffixes.some(s => domain.endsWith(s));
-  }
-  domainGroups = Object.values(groupMap).sort((a, b) => {
-    const aIsLanding = a.domain === '__landing-pages__';
-    const bIsLanding = b.domain === '__landing-pages__';
-    if (aIsLanding !== bIsLanding) return aIsLanding ? -1 : 1;
-
-    const aIsPriority = isLandingDomain(a.domain);
-    const bIsPriority = isLandingDomain(b.domain);
-    if (aIsPriority !== bIsPriority) return aIsPriority ? -1 : 1;
-
-    return b.tabs.length - a.tabs.length;
+  // --- Manual groups are explicit. Auto grouping only handles the remainder. ---
+  const manualGroups = TAB_OUT_RULES.getManualDashboardGroups(realTabs, manualGroupsState);
+  const autoGroupTabs = realTabs.filter(tab => !TAB_OUT_RULES.isManualGroupedTab(tab, manualGroupsState));
+  const autoGroups = TAB_OUT_RULES.getDashboardGroups(autoGroupTabs, {
+    landingPagePatterns: typeof LOCAL_LANDING_PAGE_PATTERNS !== 'undefined' ? LOCAL_LANDING_PAGE_PATTERNS : [],
+    customGroups: typeof LOCAL_CUSTOM_GROUPS !== 'undefined' ? LOCAL_CUSTOM_GROUPS : [],
+    semanticGroups: typeof LOCAL_SEMANTIC_GROUPS !== 'undefined' ? LOCAL_SEMANTIC_GROUPS : [],
   });
+  domainGroups = manualGroups.concat(autoGroups);
 
   // --- Render domain cards ---
   const openTabsSection      = document.getElementById('openTabsSection');
@@ -1184,7 +1312,10 @@ async function renderDashboard() {
 document.addEventListener('click', async (e) => {
   // Walk up the DOM to find the nearest element with data-action
   const actionEl = e.target.closest('[data-action]');
-  if (!actionEl) return;
+  if (!actionEl) {
+    if (!e.target.closest('.manual-group-menu')) closeManualGroupMenus();
+    return;
+  }
 
   const action = actionEl.dataset.action;
 
@@ -1199,6 +1330,168 @@ document.addEventListener('click', async (e) => {
       setTimeout(() => { banner.style.display = 'none'; banner.style.opacity = '1'; }, 400);
     }
     showToast('Closed extra Tab Out tabs');
+    return;
+  }
+
+  // ---- Toggle automatic native Chrome tab grouping ----
+  if (action === 'toggle-auto-group') {
+    e.stopPropagation();
+    const enabled = actionEl.checked === true;
+    const response = await sendRuntimeMessage({
+      type: GROUPING_MESSAGES.SET_AUTO_GROUPING,
+      enabled,
+    });
+
+    if (!response || !response.ok) {
+      actionEl.checked = !enabled;
+      showToast(response && response.error ? response.error : 'Could not update auto groups');
+      await renderGroupingControls();
+      return;
+    }
+
+    const grouped = response.result ? response.result.groupedTabs : 0;
+    showToast(enabled ? `Auto groups on${grouped ? ` — grouped ${grouped}` : ''}` : 'Auto groups off');
+    await renderDashboard();
+    return;
+  }
+
+  // ---- Apply grouping rules to current ungrouped tabs ----
+  if (action === 'group-tabs-now') {
+    const response = await sendRuntimeMessage({ type: GROUPING_MESSAGES.GROUP_TABS_NOW });
+    if (!response || !response.ok) {
+      showToast(response && response.error ? response.error : 'Could not group tabs');
+      return;
+    }
+
+    const grouped = response.result.groupedTabs;
+    const groups = response.result.groupsTouched;
+    showToast(grouped > 0
+      ? `Grouped ${grouped} tab${grouped !== 1 ? 's' : ''} into ${groups} group${groups !== 1 ? 's' : ''}`
+      : 'No ungrouped tabs to organize');
+    await renderDashboard();
+    return;
+  }
+
+  // ---- Expand or collapse all native Chrome tab groups in this window ----
+  if (action === 'expand-tab-groups' || action === 'collapse-tab-groups') {
+    const collapse = action === 'collapse-tab-groups';
+    const response = await sendRuntimeMessage({
+      type: GROUPING_MESSAGES.SET_GROUPS_COLLAPSED,
+      collapsed: collapse,
+      windowId: await getCurrentWindowId(),
+    });
+
+    if (!response || !response.ok) {
+      showToast(response && response.error ? response.error : 'Could not update tab groups');
+      return;
+    }
+
+    const total = response.result.totalGroups;
+    const touched = response.result.groupsTouched;
+    if (total === 0) {
+      showToast('No tab groups in this window');
+    } else {
+      showToast(`${collapse ? 'Collapsed' : 'Expanded'} ${touched} of ${total} group${total !== 1 ? 's' : ''}`);
+    }
+    return;
+  }
+
+  // ---- Open Chrome side panel ----
+  if (action === 'open-side-panel') {
+    const response = await sendRuntimeMessage({
+      type: GROUPING_MESSAGES.OPEN_SIDE_PANEL,
+      windowId: await getCurrentWindowId(),
+    });
+    showToast(response && response.ok ? 'Side panel opened' : 'Use the toolbar icon to open Panel');
+    return;
+  }
+
+  // ---- Create a manual custom group ----
+  if (action === 'create-manual-group') {
+    e.stopPropagation();
+    const input = document.getElementById('manualGroupNameInput');
+    const name = input && input.value.trim();
+    if (!name) {
+      showToast('Name the custom group first');
+      return;
+    }
+
+    const group = await createManualGroup(name);
+    if (input) input.value = '';
+    renderCustomGroupsPanel();
+    showToast(group ? `Created ${group.name}` : 'Could not create group');
+    return;
+  }
+
+  // ---- Delete a manual custom group ----
+  if (action === 'delete-manual-group') {
+    e.stopPropagation();
+    const groupId = actionEl.dataset.manualGroupId;
+    const result = await deleteManualGroup(groupId);
+    if (result.deleted) {
+      for (const url of result.affectedUrls) {
+        await sendRuntimeMessage({ type: GROUPING_MESSAGES.APPLY_MANUAL_GROUPING, url });
+      }
+      showToast('Custom group deleted');
+      await renderDashboard();
+    }
+    return;
+  }
+
+  // ---- Open the per-tab manual group menu ----
+  if (action === 'open-manual-group-menu') {
+    e.stopPropagation();
+    const tabUrl = actionEl.dataset.tabUrl;
+    const tabTitle = actionEl.dataset.tabTitle || tabUrl;
+    if (!tabUrl) return;
+    renderManualGroupMenu(actionEl, tabUrl, tabTitle);
+    return;
+  }
+
+  // ---- Assign a tab to a manual custom group ----
+  if (action === 'assign-manual-group') {
+    e.stopPropagation();
+    const tabUrl = actionEl.dataset.tabUrl;
+    const groupId = actionEl.dataset.manualGroupId;
+    const group = await assignTabToManualGroup(tabUrl, groupId);
+    closeManualGroupMenus();
+    if (group) {
+      await sendRuntimeMessage({ type: GROUPING_MESSAGES.APPLY_MANUAL_GROUPING, url: tabUrl });
+      showToast(`Added to ${group.name}`);
+      await renderDashboard();
+    }
+    return;
+  }
+
+  // ---- Create a manual custom group and assign the tab to it ----
+  if (action === 'create-and-assign-manual-group') {
+    e.stopPropagation();
+    const menu = actionEl.closest('.manual-group-menu');
+    const input = menu && menu.querySelector('.manual-group-menu-input');
+    const name = input && input.value.trim();
+    const tabUrl = actionEl.dataset.tabUrl;
+    if (!name || !tabUrl) {
+      showToast('Name the custom group first');
+      return;
+    }
+
+    const group = await createManualGroup(name);
+    if (group) await assignTabToManualGroup(tabUrl, group.id);
+    if (group) await sendRuntimeMessage({ type: GROUPING_MESSAGES.APPLY_MANUAL_GROUPING, url: tabUrl });
+    closeManualGroupMenus();
+    showToast(group ? `Added to ${group.name}` : 'Could not create group');
+    await renderDashboard();
+    return;
+  }
+
+  // ---- Remove a tab from manual custom grouping ----
+  if (action === 'remove-from-manual-group') {
+    e.stopPropagation();
+    const tabUrl = actionEl.dataset.tabUrl;
+    await removeTabFromManualGroup(tabUrl);
+    await sendRuntimeMessage({ type: GROUPING_MESSAGES.APPLY_MANUAL_GROUPING, url: tabUrl });
+    showToast('Removed from custom group');
+    await renderDashboard();
     return;
   }
 
@@ -1442,6 +1735,26 @@ document.addEventListener('click', (e) => {
   const body = document.getElementById('archiveBody');
   if (body) {
     body.style.display = body.style.display === 'none' ? 'block' : 'none';
+  }
+});
+
+document.addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter') return;
+
+  const groupInput = e.target.closest('#manualGroupNameInput');
+  if (groupInput) {
+    const group = await createManualGroup(groupInput.value);
+    groupInput.value = '';
+    renderCustomGroupsPanel();
+    showToast(group ? `Created ${group.name}` : 'Name the custom group first');
+    return;
+  }
+
+  const menuInput = e.target.closest('.manual-group-menu-input');
+  if (menuInput) {
+    const menu = menuInput.closest('.manual-group-menu');
+    const addButton = menu && menu.querySelector('[data-action="create-and-assign-manual-group"]');
+    if (addButton) addButton.click();
   }
 });
 

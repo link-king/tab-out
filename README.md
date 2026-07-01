@@ -24,6 +24,12 @@ The agent will walk you through it. Takes about 1 minute.
 
 - **See all your tabs at a glance** on a clean grid, grouped by domain
 - **Homepages group** pulls Gmail inbox, X home, YouTube, LinkedIn, GitHub homepages into one card
+- **Native Chrome tab groups** automatically organize tabs in the real Chrome tab strip
+- **Semantic grouping** pulls AI, Dev, Docs, Work, Finance, Reading, Social, Video, and Shopping tabs together
+- **Manual custom groups** let you put specific tabs where you want them, and auto grouping leaves them alone
+- **One-click controls** group tabs now, expand all groups, collapse all groups, or open Tab Out in the side panel
+- **Shared rules** keep the Tab Out dashboard and Chrome's native tab groups using the same names
+- **Personal grouping config** lets you add local homepage, semantic, or custom rules without changing the core extension
 - **Close tabs with style** with swoosh sound + confetti burst
 - **Duplicate detection** flags when you have the same page open twice, with one-click cleanup
 - **Click any tab to jump to it** across windows, no new tab opened
@@ -60,14 +66,16 @@ You'll see Tab Out.
 
 ```
 You open a new tab
-  -> Tab Out shows your open tabs grouped by domain
+  -> Tab Out shows your open tabs grouped by manual, semantic, or domain rules
   -> Homepages (Gmail, X, etc.) get their own group at the top
+  -> Chrome's native tab groups get the same names
+  -> Manual custom groups stay separate from auto grouping
   -> Click any tab title to jump to it
   -> Close groups you're done with (swoosh + confetti)
   -> Save tabs for later before closing them
 ```
 
-Everything runs inside the Chrome extension. No external server, no API calls, no data sent anywhere. Saved tabs are stored in `chrome.storage.local`.
+Everything runs inside the Chrome extension. No external server, no API calls, no data sent anywhere. Saved tabs, auto-group settings, and manual custom groups are stored in `chrome.storage.local`.
 
 ---
 
@@ -76,6 +84,8 @@ Everything runs inside the Chrome extension. No external server, no API calls, n
 | What | How |
 |------|-----|
 | Extension | Chrome Manifest V3 |
+| Native grouping | chrome.tabs + chrome.tabGroups |
+| Side panel | chrome.sidePanel |
 | Storage | chrome.storage.local |
 | Sound | Web Audio API (synthesized, no files) |
 | Animations | CSS transitions + JS confetti particles |

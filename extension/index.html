@@ -26,6 +26,17 @@
       <!-- "Friday, April 4, 2026" — written by getDateDisplay() in app.js -->
       <div class="date" id="dateDisplay"></div>
     </div>
+    <div class="header-actions">
+      <label class="auto-group-toggle" title="Automatically place Chrome tabs into native tab groups">
+        <input type="checkbox" id="autoGroupToggle" data-action="toggle-auto-group">
+        <span class="toggle-track" aria-hidden="true"></span>
+        <span id="autoGroupLabel">Auto groups</span>
+      </label>
+      <button class="action-btn primary" data-action="group-tabs-now" title="Group open tabs">Group now</button>
+      <button class="action-btn" data-action="expand-tab-groups" title="Expand all tab groups in this window">Expand</button>
+      <button class="action-btn" data-action="collapse-tab-groups" title="Collapse all tab groups in this window">Collapse</button>
+      <button class="action-btn" data-action="open-side-panel" title="Open side panel">Panel</button>
+    </div>
   </header>
 
   <!-- ================================================================
@@ -61,6 +72,7 @@
         <div class="section-line"></div>
         <div class="section-count" id="openTabsSectionCount"></div>
       </div>
+      <div class="custom-groups-panel" id="customGroupsPanel"></div>
       <div class="missions" id="openTabsMissions"></div>
     </div>
 
@@ -127,6 +139,7 @@
 
 <!-- Personal config (gitignored) — defines LOCAL_LANDING_PAGE_PATTERNS etc. -->
 <!-- If the file doesn't exist, that's fine — app.js uses sensible defaults. -->
+<script src="tab-rules.js"></script>
 <script src="config.local.js" onerror="/* no personal config, that's fine */"></script>
 
 <!-- Main dashboard logic — loads last so the DOM is ready -->
