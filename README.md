@@ -109,4 +109,6 @@ MIT
 
 ---
 
-Built by [Zara](https://x.com/zarazhangrui)
+## Credits
+
+Original Tab Out by [Zara](https://x.com/zarazhangrui). This fork is extended and maintained by [link-king](https://github.com/link-king).
