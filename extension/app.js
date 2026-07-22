@@ -35,6 +35,51 @@ const GROUPING_MESSAGES = {
   OPEN_SIDE_PANEL: 'TAB_OUT_OPEN_SIDE_PANEL',
 };
 
+const TAB_META_STORAGE_KEY = 'tabOutTabMeta';
+const APPEARANCE_STORAGE_KEY = 'tabOutAppearanceSettings';
+const REVIEW_NOT_VIEWED_DAYS = 7;
+const REVIEW_OPEN_DAYS = 14;
+const RULE_TYPE_LABELS = {
+  landing: 'Home pages',
+  custom: 'Site rules',
+  semantic: 'Smart topics',
+};
+const DUNHUANG_BACKGROUNDS = [
+  { id: 'shazhou-sand', name: '沙州米', background: '#f3dfbd', card: '#fff8e7', border: '#d6bb84', muted: '#8a7a62', accent: '#b8842b' },
+  { id: 'dunhuang-gold', name: '敦煌黄', background: '#eaca72', card: '#fff6d6', border: '#d5a43b', muted: '#88713d', accent: '#b68424' },
+  { id: 'mingsha-gold', name: '鸣沙金', background: '#edd596', card: '#fff8df', border: '#d6b45f', muted: '#897347', accent: '#bd8b24' },
+  { id: 'sutra-paper', name: '经卷纸', background: '#efe0bf', card: '#fff8e9', border: '#d0b582', muted: '#897864', accent: '#a8773d' },
+  { id: 'clay-white', name: '壁画白', background: '#efe7db', card: '#fffaf3', border: '#cfc0aa', muted: '#817568', accent: '#9b7855' },
+  { id: 'moon-white', name: '月影白', background: '#e8e4dc', card: '#fbfaf6', border: '#bfb8aa', muted: '#7a766e', accent: '#88806c' },
+  { id: 'cloud-white', name: '云母白', background: '#f0eee9', card: '#fffdfa', border: '#c9c4ba', muted: '#77736c', accent: '#9c9385' },
+  { id: 'silver-mist', name: '银雾', background: '#e3e5e2', card: '#fbfcfa', border: '#b5bbb3', muted: '#737a73', accent: '#7f8a7f' },
+  { id: 'mineral-blue', name: '石青', background: '#dce8e4', card: '#f6fbf8', border: '#9bb6ad', muted: '#6f817c', accent: '#537c78' },
+  { id: 'lapis-blue', name: '青金', background: '#dce5ee', card: '#f6fafc', border: '#91a8bd', muted: '#687888', accent: '#435d7a' },
+  { id: 'cave-blue', name: '窟蓝', background: '#d4dee9', card: '#f4f8fc', border: '#8fa3ba', muted: '#687786', accent: '#3f5f82' },
+  { id: 'ink-water', name: '玄水', background: '#d6d8dc', card: '#f6f7f9', border: '#9298a1', muted: '#686f78', accent: '#3f4754' },
+  { id: 'smoke-blue', name: '雾青', background: '#d6e2dc', card: '#f6fbf8', border: '#8fa9a0', muted: '#687d76', accent: '#4f746d' },
+  { id: 'peacock-blue', name: '孔雀蓝', background: '#d5e8e7', card: '#f3fbfa', border: '#82b2b0', muted: '#627f7e', accent: '#2f8586' },
+  { id: 'glaze-teal', name: '琉璃青', background: '#d3e4df', card: '#f4fbf8', border: '#82ada0', muted: '#627d75', accent: '#2f7d73' },
+  { id: 'sky-cyan', name: '瓷青', background: '#dcebe6', card: '#f7fcfa', border: '#9fc5bc', muted: '#6c827d', accent: '#4f968a' },
+  { id: 'cinnabar', name: '朱砂', background: '#ebcfc6', card: '#fff4ef', border: '#cf8d79', muted: '#866a63', accent: '#b35a45' },
+  { id: 'rouge', name: '胭脂', background: '#edd0d6', card: '#fff6f8', border: '#ce8798', muted: '#806873', accent: '#ad4d69' },
+  { id: 'tomato-red', name: '番茄红', background: '#f0ccc0', card: '#fff4ef', border: '#d7876e', muted: '#85665d', accent: '#c4523c' },
+  { id: 'coral-red', name: '珊瑚', background: '#efcfc2', card: '#fff5ef', border: '#d28b72', muted: '#84685e', accent: '#bd634a' },
+  { id: 'lotus-pink', name: '莲瓣粉', background: '#f1d8d0', card: '#fff8f4', border: '#cf9f94', muted: '#806d68', accent: '#aa6258' },
+  { id: 'ochre', name: '赭石', background: '#e5cbb0', card: '#fff5ea', border: '#c38a5d', muted: '#826a55', accent: '#9e5e32' },
+  { id: 'burnt-sienna', name: '赤陶', background: '#e0bea0', card: '#fff3e8', border: '#be7d52', muted: '#7d6453', accent: '#995533' },
+  { id: 'camel-brown', name: '驼褐', background: '#e1ceb6', card: '#fff6ea', border: '#bd9d75', muted: '#7e6d5a', accent: '#9a6a3c' },
+  { id: 'walnut', name: '檀棕', background: '#d8c2ad', card: '#fff4ea', border: '#aa8466', muted: '#766454', accent: '#7d5238' },
+  { id: 'mineral-green', name: '石绿', background: '#dde8d5', card: '#f7fbf0', border: '#98b483', muted: '#6f8066', accent: '#5f7f58' },
+  { id: 'malachite', name: '铜绿', background: '#d5e5d6', card: '#f4fbf2', border: '#8ab48c', muted: '#687f69', accent: '#4f8352' },
+  { id: 'willow-green', name: '柳绿', background: '#e3ead2', card: '#f9fcef', border: '#aebd7d', muted: '#767f62', accent: '#758d3e' },
+  { id: 'fluorite-green', name: '萤石绿', background: '#e6ecc8', card: '#fbfdec', border: '#bacb6f', muted: '#7a8358', accent: '#839a2d' },
+  { id: 'pine-green', name: '松绿', background: '#d8e2d3', card: '#f6fbf3', border: '#8fa886', muted: '#6b7b66', accent: '#4f7454' },
+  { id: 'lotus-mauve', name: '莲紫', background: '#e8d5df', card: '#fff7fa', border: '#c796aa', muted: '#7d6b75', accent: '#9b5b78' },
+  { id: 'purple-clay', name: '藤紫', background: '#ded2e2', card: '#fbf6fd', border: '#b495bd', muted: '#756b7c', accent: '#75558a' },
+  { id: 'grape-purple', name: '葡萄紫', background: '#e1d4e5', card: '#fbf6fd', border: '#b193bd', muted: '#76697d', accent: '#76528d' },
+];
+
 function sendRuntimeMessage(message) {
   return new Promise(resolve => {
     try {
@@ -65,6 +110,10 @@ async function getCurrentWindowId() {
   }
 }
 
+async function applyAutoGroupingNow() {
+  return sendRuntimeMessage({ type: GROUPING_MESSAGES.GROUP_TABS_NOW });
+}
+
 async function renderGroupingControls() {
   const toggle = document.getElementById('autoGroupToggle');
   const label = document.getElementById('autoGroupLabel');
@@ -73,7 +122,7 @@ async function renderGroupingControls() {
   const state = await getGroupingState();
   if (!state) {
     toggle.disabled = true;
-    label.textContent = 'Groups unavailable';
+    label.textContent = 'Auto groups unavailable';
     return;
   }
 
@@ -104,9 +153,11 @@ async function fetchOpenTabs() {
       active:   t.active,
       groupId:  t.groupId,
       pinned:   t.pinned,
+      lastAccessed: t.lastAccessed,
       // Flag Tab Out's own pages so we can detect duplicate new tabs
       isTabOut: t.url === newtabUrl || t.url === 'chrome://newtab/',
     }));
+    await updateTabMetadata(openTabs);
   } catch {
     // chrome.tabs API unavailable (shouldn't happen in an extension page)
     openTabs = [];
@@ -166,6 +217,55 @@ async function closeTabsExact(urls) {
   const toClose = allTabs.filter(t => urlSet.has(t.url)).map(t => t.id);
   if (toClose.length > 0) await chrome.tabs.remove(toClose);
   await fetchOpenTabs();
+}
+
+async function closeTabsByIds(tabIds) {
+  const ids = [...new Set((tabIds || []).map(id => Number(id)).filter(Number.isInteger))];
+  if (ids.length > 0) await chrome.tabs.remove(ids);
+  await fetchOpenTabs();
+}
+
+function tabIdFromElement(el) {
+  const rawId = el && (el.dataset.tabId || el.closest('.page-chip')?.dataset.tabId);
+  if (rawId === undefined || rawId === null || rawId === '') return null;
+  const tabId = Number(rawId);
+  return Number.isInteger(tabId) ? tabId : null;
+}
+
+function isSafeReviewReason(reason) {
+  return reason === 'duplicate' || reason === 'search result';
+}
+
+function getSafeReviewTabs(tabs) {
+  return (tabs || []).filter(tab => (tab.staleReasons || []).some(isSafeReviewReason));
+}
+
+async function closeReviewTabsSafely(tabs) {
+  const allTabs = await chrome.tabs.query({});
+  const tabIdsToClose = new Set();
+  const duplicateUrls = new Set();
+
+  for (const tab of tabs || []) {
+    if ((tab.staleReasons || []).includes('duplicate')) duplicateUrls.add(tab.url);
+  }
+
+  for (const tab of tabs || []) {
+    const safeToClose = (tab.staleReasons || []).includes('search result');
+    if (!duplicateUrls.has(tab.url) && safeToClose && typeof tab.id === 'number') {
+      tabIdsToClose.add(tab.id);
+    }
+  }
+
+  for (const url of duplicateUrls) {
+    const matching = allTabs.filter(tab => tab.url === url);
+    const keep = matching.find(tab => tab.active) || matching[0];
+    for (const tab of matching) {
+      if (keep && tab.id !== keep.id) tabIdsToClose.add(tab.id);
+    }
+  }
+
+  await closeTabsByIds([...tabIdsToClose]);
+  return tabIdsToClose.size;
 }
 
 /**
@@ -347,6 +447,28 @@ async function getManualGroupsState() {
   return TAB_OUT_RULES.normalizeManualGroupsState(result[TAB_OUT_RULES.MANUAL_GROUPS_STORAGE_KEY]);
 }
 
+async function getRuleSettings() {
+  const result = await chrome.storage.local.get(TAB_OUT_RULES.RULE_SETTINGS_STORAGE_KEY);
+  return TAB_OUT_RULES.normalizeRuleSettings(result[TAB_OUT_RULES.RULE_SETTINGS_STORAGE_KEY]);
+}
+
+async function setRuleSettings(nextSettings) {
+  const normalized = TAB_OUT_RULES.normalizeRuleSettings(nextSettings);
+  await chrome.storage.local.set({ [TAB_OUT_RULES.RULE_SETTINGS_STORAGE_KEY]: normalized });
+  ruleSettings = normalized;
+  return normalized;
+}
+
+function makeLocalId(prefix, name) {
+  const slug = String(name || prefix || 'item')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 32) || prefix || 'item';
+  return `${slug}-${Date.now().toString(36)}`;
+}
+
 async function setManualGroupsState(nextState) {
   const normalized = TAB_OUT_RULES.normalizeManualGroupsState(nextState);
   await chrome.storage.local.set({ [TAB_OUT_RULES.MANUAL_GROUPS_STORAGE_KEY]: normalized });
@@ -355,13 +477,23 @@ async function setManualGroupsState(nextState) {
 }
 
 function makeManualGroupId(name) {
-  const slug = String(name || 'group')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 32) || 'group';
-  return `${slug}-${Date.now().toString(36)}`;
+  return makeLocalId('group', name);
+}
+
+function normalizeRuleHostInput(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return '';
+
+  try {
+    const parsed = new URL(raw.includes('://') ? raw : `https://${raw}`);
+    if (parsed.hostname) return parsed.hostname.replace(/^\./, '');
+  } catch {}
+
+  return raw
+    .replace(/^[a-z]+:\/\//, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/:\d+$/, '')
+    .replace(/^\./, '');
 }
 
 async function createManualGroup(name) {
@@ -421,6 +553,170 @@ async function deleteManualGroup(groupId) {
   };
 }
 
+async function createCustomRule({ groupLabel, hostname, pathPrefix }) {
+  const label = String(groupLabel || '').trim();
+  const host = normalizeRuleHostInput(hostname);
+  const path = String(pathPrefix || '').trim();
+  if (!label || !host) return null;
+
+  const settings = await getRuleSettings();
+  const now = new Date().toISOString();
+  const rule = {
+    id: makeLocalId('rule', label),
+    groupKey: 'rule:' + makeLocalId('group', label),
+    groupLabel: label.slice(0, 40),
+    hostnameEndsWith: host.replace(/^\./, ''),
+    pathPrefix: path ? (path.startsWith('/') ? path : '/' + path) : undefined,
+    color: TAB_OUT_RULES.colorFromString(label),
+    sortOrder: settings.customGroups.length,
+    createdAt: now,
+    updatedAt: now,
+  };
+  settings.customGroups.push(rule);
+  await setRuleSettings(settings);
+  return rule;
+}
+
+async function deleteCustomRule(ruleId) {
+  const settings = await getRuleSettings();
+  const before = settings.customGroups.length;
+  settings.customGroups = settings.customGroups.filter(rule => rule.id !== ruleId);
+  await setRuleSettings(settings);
+  return settings.customGroups.length !== before;
+}
+
+async function moveRulePriority(type, direction) {
+  const settings = await getRuleSettings();
+  const order = TAB_OUT_RULES.normalizeRuleSettings(settings).ruleOrder.slice();
+  const index = order.indexOf(type);
+  const nextIndex = index + direction;
+  if (index === -1 || nextIndex < 0 || nextIndex >= order.length) return order;
+  [order[index], order[nextIndex]] = [order[nextIndex], order[index]];
+  settings.ruleOrder = order;
+  await setRuleSettings(settings);
+  return order;
+}
+
+async function getWorkspacesState() {
+  const result = await chrome.storage.local.get(TAB_OUT_RULES.WORKSPACES_STORAGE_KEY);
+  return TAB_OUT_RULES.normalizeWorkspacesState(result[TAB_OUT_RULES.WORKSPACES_STORAGE_KEY]);
+}
+
+async function setWorkspacesState(nextState) {
+  const normalized = TAB_OUT_RULES.normalizeWorkspacesState(nextState);
+  await chrome.storage.local.set({ [TAB_OUT_RULES.WORKSPACES_STORAGE_KEY]: normalized });
+  workspacesState = normalized;
+  return normalized;
+}
+
+async function saveCurrentWorkspace(name) {
+  const label = String(name || '').trim();
+  if (!label) return null;
+
+  const realTabs = getRealTabs();
+  if (realTabs.length === 0) return null;
+
+  const state = await getWorkspacesState();
+  const now = new Date().toISOString();
+  const seen = new Set();
+  const tabs = realTabs
+    .filter(tab => tab.url && !seen.has(tab.url) && !tab.isTabOut && (seen.add(tab.url) || true))
+    .map(tab => ({
+      url: tab.url,
+      title: tab.title || tab.url,
+      savedAt: now,
+    }));
+  if (tabs.length === 0) return null;
+
+  const workspace = {
+    id: makeLocalId('workspace', label),
+    name: label.slice(0, 48),
+    tabs,
+    createdAt: now,
+    updatedAt: now,
+  };
+  state.workspaces.unshift(workspace);
+  await setWorkspacesState(state);
+  return workspace;
+}
+
+async function restoreWorkspace(workspaceId) {
+  const state = await getWorkspacesState();
+  const workspace = state.workspaces.find(item => item.id === workspaceId);
+  if (!workspace) return 0;
+
+  const existing = new Set((await chrome.tabs.query({})).map(tab => tab.url));
+  const toOpen = workspace.tabs.filter(tab => tab.url && !existing.has(tab.url));
+  for (const tab of toOpen) {
+    await chrome.tabs.create({ url: tab.url, active: false });
+  }
+  return toOpen.length;
+}
+
+async function deleteWorkspace(workspaceId) {
+  const state = await getWorkspacesState();
+  const before = state.workspaces.length;
+  state.workspaces = state.workspaces.filter(item => item.id !== workspaceId);
+  await setWorkspacesState(state);
+  return state.workspaces.length !== before;
+}
+
+async function getTabMetadata() {
+  const result = await chrome.storage.local.get(TAB_META_STORAGE_KEY);
+  return result[TAB_META_STORAGE_KEY] && typeof result[TAB_META_STORAGE_KEY] === 'object'
+    ? result[TAB_META_STORAGE_KEY]
+    : {};
+}
+
+async function updateTabMetadata(tabs) {
+  const meta = await getTabMetadata();
+  const now = Date.now();
+  const currentUrls = new Set();
+
+  for (const tab of tabs || []) {
+    if (!tab.url || !TAB_OUT_RULES.isRealTabUrl(tab.url)) continue;
+    currentUrls.add(tab.url);
+    if (!meta[tab.url]) {
+      meta[tab.url] = {
+        firstSeenAt: now,
+        lastSeenAt: now,
+        lastAccessedAt: tab.active ? now : tab.lastAccessed || now,
+      };
+    } else {
+      meta[tab.url].lastSeenAt = now;
+      if (tab.active) meta[tab.url].lastAccessedAt = now;
+      else if (tab.lastAccessed) meta[tab.url].lastAccessedAt = Math.max(meta[tab.url].lastAccessedAt || 0, tab.lastAccessed);
+    }
+  }
+
+  for (const [url, record] of Object.entries(meta)) {
+    if (!currentUrls.has(url) && record.lastSeenAt && now - record.lastSeenAt > 30 * 86400000) {
+      delete meta[url];
+    }
+  }
+
+  await chrome.storage.local.set({ [TAB_META_STORAGE_KEY]: meta });
+  return meta;
+}
+
+function getStaleTabs(tabs, metadata) {
+  const now = Date.now();
+  const duplicateCounts = {};
+  for (const tab of tabs || []) duplicateCounts[tab.url] = (duplicateCounts[tab.url] || 0) + 1;
+
+  return (tabs || []).map(tab => {
+    const record = metadata[tab.url] || {};
+    const openedDays = record.firstSeenAt ? Math.floor((now - record.firstSeenAt) / 86400000) : 0;
+    const notViewedDays = record.lastAccessedAt ? Math.floor((now - record.lastAccessedAt) / 86400000) : 0;
+    const reasons = [];
+    if (duplicateCounts[tab.url] > 1) reasons.push('duplicate');
+    if (/search|query|results|\/s\?|\/search/i.test(tab.url || '')) reasons.push('search result');
+    if (notViewedDays >= REVIEW_NOT_VIEWED_DAYS) reasons.push(`${notViewedDays}d not viewed`);
+    if (openedDays >= REVIEW_OPEN_DAYS) reasons.push(`${openedDays}d open`);
+    return { ...tab, staleReasons: reasons, openedDays, notViewedDays };
+  }).filter(tab => tab.staleReasons.length > 0);
+}
+
 
 /* ----------------------------------------------------------------
    UI HELPERS
@@ -434,6 +730,44 @@ function escapeHtml(value) {
     '"': '&quot;',
     "'": '&#39;',
   }[char]));
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
+
+function getDunhuangBackground(backgroundId) {
+  return DUNHUANG_BACKGROUNDS.find(item => item.id === backgroundId) || DUNHUANG_BACKGROUNDS[0];
+}
+
+function normalizeAppearanceSettings(rawSettings) {
+  const raw = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
+  return {
+    backgroundId: getDunhuangBackground(raw.backgroundId).id,
+  };
+}
+
+async function getAppearanceSettings() {
+  const result = await chrome.storage.local.get(APPEARANCE_STORAGE_KEY);
+  return normalizeAppearanceSettings(result[APPEARANCE_STORAGE_KEY]);
+}
+
+async function setAppearanceSettings(nextSettings) {
+  const normalized = normalizeAppearanceSettings(nextSettings);
+  await chrome.storage.local.set({ [APPEARANCE_STORAGE_KEY]: normalized });
+  appearanceSettings = normalized;
+  return normalized;
+}
+
+function applyAppearanceSettings(settings = appearanceSettings) {
+  const theme = getDunhuangBackground(settings && settings.backgroundId);
+  const root = document.documentElement;
+  root.style.setProperty('--paper', theme.background);
+  root.style.setProperty('--card-bg', theme.card);
+  root.style.setProperty('--warm-gray', theme.border);
+  root.style.setProperty('--muted', theme.muted);
+  root.style.setProperty('--accent-amber', theme.accent);
+  root.dataset.background = theme.id;
 }
 
 /**
@@ -856,6 +1190,13 @@ const ICONS = {
    ---------------------------------------------------------------- */
 let domainGroups = [];
 let manualGroupsState = { groups: [], assignments: {} };
+let ruleSettings = TAB_OUT_RULES.normalizeRuleSettings({});
+let workspacesState = { workspaces: [] };
+let appearanceSettings = normalizeAppearanceSettings({});
+let currentActiveTab = null;
+let staleTabs = [];
+let dashboardRefreshTimer = null;
+let lastCenteredCurrentTabKey = '';
 
 
 /* ----------------------------------------------------------------
@@ -871,14 +1212,183 @@ let manualGroupsState = { groups: [], assignments: {} };
 function getRealTabs() {
   return openTabs.filter(t => {
     const url = t.url || '';
-    return (
-      !url.startsWith('chrome://') &&
-      !url.startsWith('chrome-extension://') &&
-      !url.startsWith('about:') &&
-      !url.startsWith('edge://') &&
-      !url.startsWith('brave://')
-    );
+    return TAB_OUT_RULES.isRealTabUrl(url);
   });
+}
+
+async function getCurrentActiveRealTab() {
+  const currentWindowId = await getCurrentWindowId();
+  const activeInWindow = openTabs.find(tab =>
+    tab.active &&
+    tab.windowId === currentWindowId &&
+    TAB_OUT_RULES.isRealTabUrl(tab.url)
+  );
+  if (activeInWindow) return activeInWindow;
+
+  if (currentWindowId === null || currentWindowId === undefined) {
+    return openTabs.find(tab => tab.active && TAB_OUT_RULES.isRealTabUrl(tab.url)) || null;
+  }
+  return null;
+}
+
+function isSameTab(tab, otherTab) {
+  if (!tab || !otherTab) return false;
+  if (Number.isInteger(tab.id) && Number.isInteger(otherTab.id)) return tab.id === otherTab.id;
+  return tab.url && otherTab.url && tab.url === otherTab.url && tab.windowId === otherTab.windowId;
+}
+
+function stableDomainId(domain) {
+  return 'domain-' + String(domain || '').replace(/[^a-z0-9]/g, '-');
+}
+
+function getGroupLabel(group) {
+  if (!group) return '';
+  return group.domain === '__landing-pages__' ? 'Home pages' : (group.label || friendlyDomain(group.domain));
+}
+
+function getHostnameForTab(tab) {
+  try {
+    return new URL(tab.url).hostname;
+  } catch {
+    return '';
+  }
+}
+
+function getTabLabel(tab) {
+  const hostname = getHostnameForTab(tab);
+  return cleanTitle(smartTitle(stripTitleNoise(tab.title || ''), tab.url), hostname) || hostname || tab.url || 'Current tab';
+}
+
+function findGroupForTab(groups, tab) {
+  if (!tab) return null;
+  return (groups || []).find(group => (group.tabs || []).some(groupTab => isSameTab(groupTab, tab))) || null;
+}
+
+function prioritizeCurrentTabGroup(groups, tab) {
+  if (!tab) return groups;
+  const currentIndex = groups.findIndex(group => (group.tabs || []).some(groupTab => isSameTab(groupTab, tab)));
+  if (currentIndex <= 0) return groups;
+  const ordered = groups.slice();
+  const [currentGroup] = ordered.splice(currentIndex, 1);
+  ordered.unshift(currentGroup);
+  return ordered;
+}
+
+function findDomainCard(domainId) {
+  return Array.from(document.querySelectorAll('.mission-card[data-domain-id]'))
+    .find(card => card.dataset.domainId === domainId) || null;
+}
+
+function renderCurrentTabStrip(tab, group) {
+  const strip = document.getElementById('currentTabStrip');
+  if (!strip) return;
+
+  if (!tab) {
+    strip.innerHTML = `
+      <div class="current-tab-main">
+        <div class="current-tab-copy">
+          <div class="current-tab-label">Current tab</div>
+          <div class="current-tab-title">Open a webpage to show it here</div>
+        </div>
+        <div class="current-tab-group">Hidden on Tab Out pages</div>
+      </div>`;
+    strip.style.display = 'flex';
+    return;
+  }
+
+  const domainId = group ? stableDomainId(group.domain) : '';
+  const label = getTabLabel(tab);
+  const groupLabel = group ? getGroupLabel(group) : 'Not grouped yet';
+  const hostname = getHostnameForTab(tab);
+  const faviconUrl = hostname ? `https://www.google.com/s2/favicons?domain=${hostname}&sz=16` : '';
+  const safeTabId = Number.isInteger(tab.id) ? String(tab.id) : '';
+
+  strip.innerHTML = `
+    <div class="current-tab-main">
+      ${faviconUrl ? `<img class="current-tab-favicon" src="${faviconUrl}" alt="" onerror="this.style.display='none'">` : ''}
+      <div class="current-tab-copy">
+        <div class="current-tab-label">Current tab</div>
+        <div class="current-tab-title" title="${escapeAttr(label)}">${escapeHtml(label)}</div>
+      </div>
+      <div class="current-tab-group" title="${escapeAttr(groupLabel)}">Group: ${escapeHtml(groupLabel)}</div>
+    </div>
+    <div class="current-tab-actions">
+      ${group ? `<button class="action-btn" data-action="show-current-group" data-domain-id="${escapeAttr(domainId)}">Show group</button>` : ''}
+      <button class="action-btn close-tabs" data-action="close-single-tab" data-tab-id="${escapeAttr(safeTabId)}" data-tab-url="${escapeAttr(tab.url || '')}">
+        ${ICONS.close}
+        Close
+      </button>
+    </div>`;
+  strip.style.display = 'flex';
+}
+
+function currentTabCenterKey(tab, group) {
+  if (!tab || !group) return '';
+  const tabKey = Number.isInteger(tab.id) ? tab.id : `${tab.windowId || ''}:${tab.url || ''}`;
+  return `${tabKey}:${tab.url || ''}:${group.domain || ''}`;
+}
+
+function centerCurrentTabInSidePanel(tab, group) {
+  const centerKey = currentTabCenterKey(tab, group);
+  if (!centerKey || centerKey === lastCenteredCurrentTabKey) return;
+  lastCenteredCurrentTabKey = centerKey;
+
+  setTimeout(() => {
+    const card = findDomainCard(stableDomainId(group.domain));
+    if (!card) return;
+
+    const tabId = Number.isInteger(tab.id) ? String(tab.id) : '';
+    const currentChip = Array.from(card.querySelectorAll('.page-chip[data-tab-id]'))
+      .find(chip => chip.dataset.tabId === tabId) ||
+      card.querySelector('.page-chip.chip-is-current');
+    const target = currentChip || card;
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    card.classList.add('current-group-pulse');
+    if (currentChip) currentChip.classList.add('chip-current-pulse');
+
+    setTimeout(() => {
+      card.classList.remove('current-group-pulse');
+      if (currentChip) currentChip.classList.remove('chip-current-pulse');
+    }, 900);
+  }, 120);
+}
+
+function setupLiveDashboardRefresh() {
+  const schedule = (delay = 250) => {
+    if (dashboardRefreshTimer) clearTimeout(dashboardRefreshTimer);
+    dashboardRefreshTimer = setTimeout(() => {
+      dashboardRefreshTimer = null;
+      if (document.visibilityState !== 'hidden') renderDashboard();
+    }, delay);
+  };
+
+  try {
+    chrome.tabs.onActivated.addListener(() => schedule(80));
+    chrome.tabs.onCreated.addListener(() => schedule(500));
+    chrome.tabs.onRemoved.addListener(() => schedule(120));
+    chrome.tabs.onMoved.addListener(() => schedule(120));
+    chrome.tabs.onAttached.addListener(() => schedule(120));
+    chrome.tabs.onDetached.addListener(() => schedule(120));
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+      if (
+        changeInfo.url ||
+        changeInfo.title ||
+        changeInfo.groupId !== undefined ||
+        changeInfo.status === 'complete'
+      ) {
+        schedule(350);
+      }
+    });
+    if (chrome.tabGroups && chrome.tabGroups.onUpdated) {
+      chrome.tabGroups.onUpdated.addListener(() => schedule(120));
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') schedule(0);
+    });
+  } catch (err) {
+    console.warn('[tab-out] Live tab refresh unavailable:', err);
+  }
 }
 
 /**
@@ -901,39 +1411,178 @@ function checkTabOutDupes() {
   }
 }
 
-function getManualGroupCounts(state = manualGroupsState) {
+function getManualGroupCounts(state = manualGroupsState, tabs = openTabs) {
   const counts = {};
   for (const group of state.groups || []) counts[group.id] = 0;
-  for (const groupId of Object.values(state.assignments || {})) {
+  for (const tab of tabs || []) {
+    const groupId = TAB_OUT_RULES.getManualGroupIdForUrl(tab && tab.url, state);
     if (typeof counts[groupId] === 'number') counts[groupId] += 1;
   }
   return counts;
+}
+
+function renderRulePriority() {
+  return `<div class="priority-row">
+    ${ruleSettings.ruleOrder.map((type, index) => `
+      <div class="priority-chip">
+        <span>${RULE_TYPE_LABELS[type] || type}</span>
+        <button data-action="move-rule-priority" data-rule-type="${type}" data-direction="-1" title="Move earlier" ${index === 0 ? 'disabled' : ''}>↑</button>
+        <button data-action="move-rule-priority" data-rule-type="${type}" data-direction="1" title="Move later" ${index === ruleSettings.ruleOrder.length - 1 ? 'disabled' : ''}>↓</button>
+      </div>`).join('')}
+  </div>`;
+}
+
+function renderCustomRuleRows() {
+  if (!ruleSettings.customGroups.length) {
+    return '<div class="organizer-empty">No site rules yet</div>';
+  }
+
+  return `<div class="rule-list">
+    ${ruleSettings.customGroups.map(rule => `
+      <div class="rule-pill">
+        <span class="custom-group-dot color-${rule.color || 'grey'}"></span>
+        <span class="rule-name">${escapeHtml(rule.groupLabel)}</span>
+        <span class="rule-match">${escapeHtml(rule.hostname || rule.hostnameEndsWith || (rule.hostnameSuffixes || []).join(', '))}${rule.pathPrefix ? escapeHtml(rule.pathPrefix) : ''}</span>
+        <button class="custom-group-delete" data-action="delete-custom-rule" data-rule-id="${escapeAttr(rule.id)}" title="Delete rule">${ICONS.close}</button>
+      </div>`).join('')}
+  </div>`;
+}
+
+function renderWorkspaceRows() {
+  if (!workspacesState.workspaces.length) {
+    return '<div class="organizer-empty">No saved sets yet</div>';
+  }
+
+  return `<div class="workspace-list">
+    ${workspacesState.workspaces.slice(0, 5).map(workspace => `
+      <div class="workspace-row">
+        <div class="workspace-info">
+          <span class="workspace-name">${escapeHtml(workspace.name)}</span>
+          <span class="workspace-meta">${workspace.tabs.length} tab${workspace.tabs.length !== 1 ? 's' : ''}</span>
+        </div>
+        <button class="mini-btn" data-action="restore-workspace" data-workspace-id="${escapeAttr(workspace.id)}">Open</button>
+        <button class="custom-group-delete" data-action="delete-workspace" data-workspace-id="${escapeAttr(workspace.id)}" title="Delete saved set">${ICONS.close}</button>
+      </div>`).join('')}
+  </div>`;
+}
+
+function renderStaleTabsSummary() {
+  if (!staleTabs.length) {
+    return '<div class="organizer-empty">Nothing to review</div>';
+  }
+
+  const safeReviewCount = getSafeReviewTabs(staleTabs).length;
+  const sample = staleTabs.slice(0, 4).map(tab => `
+    <div class="stale-row">
+      <span class="stale-title">${escapeHtml(cleanTitle(smartTitle(stripTitleNoise(tab.title || ''), tab.url), ''))}</span>
+      <span class="stale-reasons">${escapeHtml(tab.staleReasons.join(', '))}</span>
+      <button class="custom-group-delete" data-action="close-stale-tab" data-tab-id="${tab.id}" title="Close tab">${ICONS.close}</button>
+    </div>`).join('');
+
+  return `<div class="stale-list">
+    ${sample}
+    ${safeReviewCount > 0 ? `<div class="stale-actions">
+      <button class="mini-btn" data-action="close-all-stale-tabs">Clean duplicates/search</button>
+    </div>` : ''}
+  </div>`;
+}
+
+function renderBackgroundPalette() {
+  return `<div class="background-palette">
+    ${DUNHUANG_BACKGROUNDS.map(theme => {
+      const active = theme.id === appearanceSettings.backgroundId;
+      return `<button class="background-swatch${active ? ' is-active' : ''}"
+        data-action="set-background-color"
+        data-background-id="${escapeAttr(theme.id)}"
+        aria-pressed="${active}"
+        title="${escapeAttr(theme.name)}"
+        style="--swatch-bg:${escapeAttr(theme.background)};--swatch-card:${escapeAttr(theme.card)};--swatch-accent:${escapeAttr(theme.accent)}">
+          <span class="background-swatch-chip" aria-hidden="true"></span>
+          <span class="background-swatch-name">${escapeHtml(theme.name)}</span>
+        </button>`;
+    }).join('')}
+  </div>`;
+}
+
+function staleReasonsForUrl(url) {
+  const stale = staleTabs.find(tab => tab.url === url);
+  return stale ? stale.staleReasons : [];
 }
 
 function renderCustomGroupsPanel() {
   const panel = document.getElementById('customGroupsPanel');
   if (!panel) return;
 
+  const expanded = panel.dataset.settingsExpanded === 'true';
+  const toggleHint = expanded ? 'Hide settings' : 'Expand to see more settings';
   const groups = manualGroupsState.groups || [];
-  const counts = getManualGroupCounts();
+  const counts = getManualGroupCounts(manualGroupsState, getRealTabs());
   const groupRows = groups.length
     ? `<div class="custom-group-list">
         ${groups.map(group => `
-          <div class="custom-group-pill">
+          <div class="custom-group-pill" data-manual-group-id="${group.id}" data-drop-action="assign-manual-group">
             <span class="custom-group-dot color-${group.color || 'grey'}"></span>
             <span class="custom-group-name">${escapeHtml(group.name)}</span>
             <span class="custom-group-count">${counts[group.id] || 0}</span>
-            <button class="custom-group-delete" data-action="delete-manual-group" data-manual-group-id="${group.id}" title="Delete custom group">${ICONS.close}</button>
+            <button class="custom-group-delete" data-action="delete-manual-group" data-manual-group-id="${escapeAttr(group.id)}" title="Delete group">${ICONS.close}</button>
           </div>`).join('')}
       </div>`
     : '';
 
   panel.innerHTML = `
-    <div class="custom-group-create">
-      <input id="manualGroupNameInput" class="custom-group-input" type="text" maxlength="40" placeholder="New custom group">
-      <button class="action-btn" data-action="create-manual-group">${ICONS.tabs} Add group</button>
-    </div>
-    ${groupRows}`;
+    <button class="settings-toggle" data-action="toggle-organizer-settings" aria-expanded="${expanded}" aria-controls="organizerSettingsGrid">
+      <span class="settings-toggle-chevron" aria-hidden="true"></span>
+      <span class="settings-toggle-copy">
+        <span class="settings-toggle-title">More settings</span>
+        <span class="settings-toggle-hint">${toggleHint}</span>
+      </span>
+    </button>
+
+    <div class="organizer-grid" id="organizerSettingsGrid" ${expanded ? '' : 'hidden'}>
+      <div class="organizer-block organizer-block-wide">
+        <div class="organizer-heading">Dunhuang background</div>
+        ${renderBackgroundPalette()}
+      </div>
+
+      <div class="organizer-block">
+        <div class="organizer-heading">My groups</div>
+        <div class="custom-group-create">
+          <input id="manualGroupNameInput" class="custom-group-input" type="text" maxlength="40" placeholder="New group">
+          <button class="action-btn" data-action="create-manual-group">${ICONS.tabs} Add</button>
+        </div>
+        ${groupRows || '<div class="organizer-empty">Create a group, then drop tabs here</div>'}
+      </div>
+
+      <div class="organizer-block">
+        <div class="organizer-heading">Rule order</div>
+        ${renderRulePriority()}
+      </div>
+
+      <div class="organizer-block">
+        <div class="organizer-heading">Site rules</div>
+        <div class="custom-rule-create">
+          <input id="customRuleNameInput" class="custom-group-input" type="text" maxlength="40" placeholder="Group">
+          <input id="customRuleHostInput" class="custom-group-input" type="text" maxlength="120" placeholder="Site">
+          <input id="customRulePathInput" class="custom-group-input compact" type="text" maxlength="80" placeholder="Path">
+          <button class="action-btn" data-action="create-custom-rule">Add</button>
+        </div>
+        ${renderCustomRuleRows()}
+      </div>
+
+      <div class="organizer-block">
+        <div class="organizer-heading">Saved sets</div>
+        <div class="custom-group-create">
+          <input id="workspaceNameInput" class="custom-group-input" type="text" maxlength="48" placeholder="Set name">
+          <button class="action-btn" data-action="save-workspace">Save</button>
+        </div>
+        ${renderWorkspaceRows()}
+      </div>
+
+      <div class="organizer-block organizer-block-wide">
+        <div class="organizer-heading">Needs review</div>
+        ${renderStaleTabsSummary()}
+      </div>
+    </div>`;
 }
 
 function closeManualGroupMenus() {
@@ -946,17 +1595,17 @@ function renderManualGroupMenu(anchor, tabUrl, tabTitle) {
   const menu = document.createElement('div');
   menu.className = 'manual-group-menu';
 
-  const safeUrl = (tabUrl || '').replace(/"/g, '&quot;');
-  const safeTitle = (tabTitle || tabUrl || '').replace(/"/g, '&quot;');
+  const safeUrl = escapeAttr(tabUrl || '');
+  const safeTitle = escapeAttr(tabTitle || tabUrl || '');
   const groups = manualGroupsState.groups || [];
   const groupButtons = groups.map(group => `
-    <button class="manual-group-menu-item" data-action="assign-manual-group" data-tab-url="${safeUrl}" data-manual-group-id="${group.id}">
+    <button class="manual-group-menu-item" data-action="assign-manual-group" data-tab-url="${safeUrl}" data-manual-group-id="${escapeAttr(group.id)}">
       <span class="custom-group-dot color-${group.color || 'grey'}"></span>
       <span>${escapeHtml(group.name)}</span>
     </button>`).join('');
 
   menu.innerHTML = `
-    <div class="manual-group-menu-title">Custom group</div>
+    <div class="manual-group-menu-title">My groups</div>
     ${groupButtons || '<div class="manual-group-empty">Create a group first</div>'}
     <div class="manual-group-menu-create">
       <input class="manual-group-menu-input" type="text" maxlength="40" placeholder="New group">
@@ -976,27 +1625,31 @@ function renderManualGroupMenu(anchor, tabUrl, tabTitle) {
 function buildOverflowChips(hiddenTabs, urlCounts = {}) {
   const hiddenChips = hiddenTabs.map(tab => {
     const label    = cleanTitle(smartTitle(stripTitleNoise(tab.title || ''), tab.url), '');
+    const safeLabel = escapeHtml(label);
     const count    = urlCounts[tab.url] || 1;
     const dupeTag  = count > 1 ? ` <span class="chip-dupe-badge">(${count}x)</span>` : '';
-    const chipClass = count > 1 ? ' chip-has-dupes' : '';
-    const safeUrl   = (tab.url || '').replace(/"/g, '&quot;');
-    const safeTitle = label.replace(/"/g, '&quot;');
+    const staleReasons = staleReasonsForUrl(tab.url);
+    const staleTag = staleReasons.length ? ` <span class="chip-stale-badge">${escapeHtml(staleReasons[0])}</span>` : '';
+    const chipClass = `${count > 1 ? ' chip-has-dupes' : ''}${staleReasons.length ? ' chip-is-stale' : ''}`;
+    const safeUrl   = escapeAttr(tab.url || '');
+    const safeTitle = escapeAttr(label);
+    const safeTabId = Number.isInteger(tab.id) ? String(tab.id) : '';
     const manualGroupId = TAB_OUT_RULES.getManualGroupIdForUrl(tab.url, manualGroupsState);
     const manualAction = manualGroupId
-      ? `<button class="chip-action chip-manual" data-action="remove-from-manual-group" data-tab-url="${safeUrl}" title="Remove from custom group">${ICONS.close}</button>`
-      : `<button class="chip-action chip-manual" data-action="open-manual-group-menu" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Add to custom group">${ICONS.tabs}</button>`;
+      ? `<button class="chip-action chip-manual" data-action="remove-from-manual-group" data-tab-url="${safeUrl}" title="Remove from group">${ICONS.close}</button>`
+      : `<button class="chip-action chip-manual" data-action="open-manual-group-menu" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Add to group">${ICONS.tabs}</button>`;
     let domain = '';
     try { domain = new URL(tab.url).hostname; } catch {}
     const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : '';
-    return `<div class="page-chip clickable${chipClass}" data-action="focus-tab" data-tab-url="${safeUrl}" title="${safeTitle}">
+    return `<div class="page-chip clickable${chipClass}" data-action="focus-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" draggable="true" title="${safeTitle}">
       ${faviconUrl ? `<img class="chip-favicon" src="${faviconUrl}" alt="" onerror="this.style.display='none'">` : ''}
-      <span class="chip-text">${label}</span>${dupeTag}
+      <span class="chip-text">${safeLabel}</span>${dupeTag}${staleTag}
       <div class="chip-actions">
         ${manualAction}
-        <button class="chip-action chip-save" data-action="defer-single-tab" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Save for later">
+        <button class="chip-action chip-save" data-action="defer-single-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" data-tab-title="${safeTitle}" title="Save tab">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" /></svg>
         </button>
-        <button class="chip-action chip-close" data-action="close-single-tab" data-tab-url="${safeUrl}" title="Close this tab">
+        <button class="chip-action chip-close" data-action="close-single-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" title="Close this tab">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
         </button>
       </div>
@@ -1025,7 +1678,10 @@ function renderDomainCard(group) {
   const tabs      = group.tabs || [];
   const tabCount  = tabs.length;
   const isLanding = group.domain === '__landing-pages__';
-  const stableId  = 'domain-' + group.domain.replace(/[^a-z0-9]/g, '-');
+  const stableId  = stableDomainId(group.domain);
+  const hasCurrentTab = currentActiveTab
+    ? tabs.some(tab => isSameTab(tab, currentActiveTab))
+    : false;
 
   // Count duplicates (exact URL match)
   const urlCounts = {};
@@ -1033,6 +1689,7 @@ function renderDomainCard(group) {
   const dupeUrls   = Object.entries(urlCounts).filter(([, c]) => c > 1);
   const hasDupes   = dupeUrls.length > 0;
   const totalExtras = dupeUrls.reduce((s, [, c]) => s + c - 1, 0);
+  const displayGroupName = isLanding ? 'Home pages' : (group.label || friendlyDomain(group.domain));
 
   const tabBadge = `<span class="open-tabs-badge">
     ${ICONS.tabs}
@@ -1046,10 +1703,22 @@ function renderDomainCard(group) {
     : '';
 
   // Deduplicate for display: show each URL once, with (Nx) badge if duped
-  const seen = new Set();
+  const seen = new Map();
   const uniqueTabs = [];
   for (const tab of tabs) {
-    if (!seen.has(tab.url)) { seen.add(tab.url); uniqueTabs.push(tab); }
+    const key = tab.url || `tab:${tab.id}`;
+    if (!seen.has(key)) {
+      seen.set(key, uniqueTabs.length);
+      uniqueTabs.push(tab);
+    } else if (isSameTab(tab, currentActiveTab)) {
+      uniqueTabs[seen.get(key)] = tab;
+    }
+  }
+
+  const currentUniqueIndex = uniqueTabs.findIndex(tab => isSameTab(tab, currentActiveTab));
+  if (currentUniqueIndex > 0) {
+    const [currentTab] = uniqueTabs.splice(currentUniqueIndex, 1);
+    uniqueTabs.unshift(currentTab);
   }
 
   const visibleTabs = uniqueTabs.slice(0, 8);
@@ -1064,26 +1733,32 @@ function renderDomainCard(group) {
       if (parsed.hostname === 'localhost' && parsed.port) label = `${parsed.port} ${label}`;
     } catch {}
     const count    = urlCounts[tab.url];
+    const safeLabel = escapeHtml(label);
     const dupeTag  = count > 1 ? ` <span class="chip-dupe-badge">(${count}x)</span>` : '';
-    const chipClass = count > 1 ? ' chip-has-dupes' : '';
-    const safeUrl   = (tab.url || '').replace(/"/g, '&quot;');
-    const safeTitle = label.replace(/"/g, '&quot;');
+    const staleReasons = staleReasonsForUrl(tab.url);
+    const staleTag = staleReasons.length ? ` <span class="chip-stale-badge">${escapeHtml(staleReasons[0])}</span>` : '';
+    const isCurrent = isSameTab(tab, currentActiveTab);
+    const currentTag = isCurrent ? ' <span class="chip-current-badge">Current</span>' : '';
+    const chipClass = `${count > 1 ? ' chip-has-dupes' : ''}${staleReasons.length ? ' chip-is-stale' : ''}${isCurrent ? ' chip-is-current' : ''}`;
+    const safeUrl   = escapeAttr(tab.url || '');
+    const safeTitle = escapeAttr(label);
+    const safeTabId = Number.isInteger(tab.id) ? String(tab.id) : '';
     const manualGroupId = TAB_OUT_RULES.getManualGroupIdForUrl(tab.url, manualGroupsState);
     const manualAction = manualGroupId
-      ? `<button class="chip-action chip-manual" data-action="remove-from-manual-group" data-tab-url="${safeUrl}" title="Remove from custom group">${ICONS.close}</button>`
-      : `<button class="chip-action chip-manual" data-action="open-manual-group-menu" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Add to custom group">${ICONS.tabs}</button>`;
+      ? `<button class="chip-action chip-manual" data-action="remove-from-manual-group" data-tab-url="${safeUrl}" title="Remove from group">${ICONS.close}</button>`
+      : `<button class="chip-action chip-manual" data-action="open-manual-group-menu" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Add to group">${ICONS.tabs}</button>`;
     let domain = '';
     try { domain = new URL(tab.url).hostname; } catch {}
     const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : '';
-    return `<div class="page-chip clickable${chipClass}" data-action="focus-tab" data-tab-url="${safeUrl}" title="${safeTitle}">
+    return `<div class="page-chip clickable${chipClass}" data-action="focus-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" draggable="true" title="${safeTitle}">
       ${faviconUrl ? `<img class="chip-favicon" src="${faviconUrl}" alt="" onerror="this.style.display='none'">` : ''}
-      <span class="chip-text">${label}</span>${dupeTag}
+      <span class="chip-text">${safeLabel}</span>${currentTag}${dupeTag}${staleTag}
       <div class="chip-actions">
         ${manualAction}
-        <button class="chip-action chip-save" data-action="defer-single-tab" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Save for later">
+        <button class="chip-action chip-save" data-action="defer-single-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" data-tab-title="${safeTitle}" title="Save tab">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" /></svg>
         </button>
-        <button class="chip-action chip-close" data-action="close-single-tab" data-tab-url="${safeUrl}" title="Close this tab">
+        <button class="chip-action chip-close" data-action="close-single-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" title="Close this tab">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
         </button>
       </div>
@@ -1105,11 +1780,11 @@ function renderDomainCard(group) {
   }
 
   return `
-    <div class="mission-card domain-card ${hasDupes ? 'has-amber-bar' : 'has-neutral-bar'}" data-domain-id="${stableId}">
+    <div class="mission-card domain-card ${hasCurrentTab ? 'has-active-bar current-group-card' : hasDupes ? 'has-amber-bar' : 'has-neutral-bar'}" data-domain-id="${stableId}">
       <div class="status-bar"></div>
       <div class="mission-content">
         <div class="mission-top">
-          <span class="mission-name">${isLanding ? 'Homepages' : (group.label || friendlyDomain(group.domain))}</span>
+          <span class="mission-name">${escapeHtml(displayGroupName)}</span>
           ${tabBadge}
           ${dupeBadge}
         </div>
@@ -1193,22 +1868,27 @@ async function renderDeferredColumn() {
 function renderDeferredItem(item) {
   let domain = '';
   try { domain = new URL(item.url).hostname.replace(/^www\./, ''); } catch {}
-  const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=16`;
+  const safeDomain = escapeHtml(domain);
+  const safeItemId = escapeAttr(item.id);
+  const safeUrl = escapeAttr(item.url || '');
+  const safeTitle = escapeAttr(item.title || item.url || '');
+  const displayTitle = escapeHtml(item.title || item.url || '');
+  const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=16`;
   const ago = timeAgo(item.savedAt);
 
   return `
-    <div class="deferred-item" data-deferred-id="${item.id}">
-      <input type="checkbox" class="deferred-checkbox" data-action="check-deferred" data-deferred-id="${item.id}">
+    <div class="deferred-item" data-deferred-id="${safeItemId}">
+      <input type="checkbox" class="deferred-checkbox" data-action="check-deferred" data-deferred-id="${safeItemId}">
       <div class="deferred-info">
-        <a href="${item.url}" target="_blank" rel="noopener" class="deferred-title" title="${(item.title || '').replace(/"/g, '&quot;')}">
-          <img src="${faviconUrl}" alt="" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" onerror="this.style.display='none'">${item.title || item.url}
+        <a href="${safeUrl}" target="_blank" rel="noopener" class="deferred-title" title="${safeTitle}">
+          <img src="${escapeAttr(faviconUrl)}" alt="" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" onerror="this.style.display='none'">${displayTitle}
         </a>
         <div class="deferred-meta">
-          <span>${domain}</span>
+          <span>${safeDomain}</span>
           <span>${ago}</span>
         </div>
       </div>
-      <button class="deferred-dismiss" data-action="dismiss-deferred" data-deferred-id="${item.id}" title="Dismiss">
+      <button class="deferred-dismiss" data-action="dismiss-deferred" data-deferred-id="${safeItemId}" title="Dismiss">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
       </button>
     </div>`;
@@ -1221,10 +1901,13 @@ function renderDeferredItem(item) {
  */
 function renderArchiveItem(item) {
   const ago = item.completedAt ? timeAgo(item.completedAt) : timeAgo(item.savedAt);
+  const safeUrl = escapeAttr(item.url || '');
+  const safeTitle = escapeAttr(item.title || item.url || '');
+  const displayTitle = escapeHtml(item.title || item.url || '');
   return `
     <div class="archive-item">
-      <a href="${item.url}" target="_blank" rel="noopener" class="archive-item-title" title="${(item.title || '').replace(/"/g, '&quot;')}">
-        ${item.title || item.url}
+      <a href="${safeUrl}" target="_blank" rel="noopener" class="archive-item-title" title="${safeTitle}">
+        ${displayTitle}
       </a>
       <span class="archive-item-date">${ago}</span>
     </div>`;
@@ -1257,30 +1940,48 @@ async function renderStaticDashboard() {
   // --- Fetch tabs ---
   await fetchOpenTabs();
   const realTabs = getRealTabs();
+  currentActiveTab = await getCurrentActiveRealTab();
   manualGroupsState = await getManualGroupsState();
+  ruleSettings = await getRuleSettings();
+  workspacesState = await getWorkspacesState();
+  appearanceSettings = await getAppearanceSettings();
+  applyAppearanceSettings(appearanceSettings);
+  staleTabs = getStaleTabs(realTabs, await getTabMetadata());
   renderCustomGroupsPanel();
 
-  // --- Manual groups are explicit. Auto grouping only handles the remainder. ---
+  // --- My groups are explicit. Auto grouping only handles the remainder. ---
   const manualGroups = TAB_OUT_RULES.getManualDashboardGroups(realTabs, manualGroupsState);
   const autoGroupTabs = realTabs.filter(tab => !TAB_OUT_RULES.isManualGroupedTab(tab, manualGroupsState));
   const autoGroups = TAB_OUT_RULES.getDashboardGroups(autoGroupTabs, {
     landingPagePatterns: typeof LOCAL_LANDING_PAGE_PATTERNS !== 'undefined' ? LOCAL_LANDING_PAGE_PATTERNS : [],
-    customGroups: typeof LOCAL_CUSTOM_GROUPS !== 'undefined' ? LOCAL_CUSTOM_GROUPS : [],
+    customGroups: ruleSettings.customGroups.concat(typeof LOCAL_CUSTOM_GROUPS !== 'undefined' ? LOCAL_CUSTOM_GROUPS : []),
     semanticGroups: typeof LOCAL_SEMANTIC_GROUPS !== 'undefined' ? LOCAL_SEMANTIC_GROUPS : [],
+    ruleOrder: ruleSettings.ruleOrder,
   });
-  domainGroups = manualGroups.concat(autoGroups);
+  domainGroups = prioritizeCurrentTabGroup(manualGroups.concat(autoGroups), currentActiveTab);
+  const currentGroup = findGroupForTab(domainGroups, currentActiveTab);
+  renderCurrentTabStrip(currentActiveTab, currentGroup);
 
-  // --- Render domain cards ---
+  // --- Render group cards ---
   const openTabsSection      = document.getElementById('openTabsSection');
   const openTabsMissionsEl   = document.getElementById('openTabsMissions');
   const openTabsSectionCount = document.getElementById('openTabsSectionCount');
   const openTabsSectionTitle = document.getElementById('openTabsSectionTitle');
 
-  if (domainGroups.length > 0 && openTabsSection) {
+  const hasOrganizerContent =
+    manualGroupsState.groups.length > 0 ||
+    ruleSettings.customGroups.length > 0 ||
+    workspacesState.workspaces.length > 0 ||
+    staleTabs.length > 0;
+
+  if ((domainGroups.length > 0 || hasOrganizerContent) && openTabsSection) {
     if (openTabsSectionTitle) openTabsSectionTitle.textContent = 'Open tabs';
-    openTabsSectionCount.innerHTML = `${domainGroups.length} domain${domainGroups.length !== 1 ? 's' : ''} &nbsp;&middot;&nbsp; <button class="action-btn close-tabs" data-action="close-all-open-tabs" style="font-size:11px;padding:3px 10px;">${ICONS.close} Close all ${realTabs.length} tabs</button>`;
-    openTabsMissionsEl.innerHTML = domainGroups.map(g => renderDomainCard(g)).join('');
+    openTabsSectionCount.innerHTML = `${domainGroups.length} group${domainGroups.length !== 1 ? 's' : ''} &nbsp;&middot;&nbsp; <button class="action-btn close-tabs" data-action="close-all-open-tabs" style="font-size:11px;padding:3px 10px;">${ICONS.close} Close all ${realTabs.length} tabs</button>`;
+    openTabsMissionsEl.innerHTML = domainGroups.length
+      ? domainGroups.map(g => renderDomainCard(g)).join('')
+      : '<div class="organizer-empty">No open tabs</div>';
     openTabsSection.style.display = 'block';
+    centerCurrentTabInSidePanel(currentActiveTab, currentGroup);
   } else if (openTabsSection) {
     openTabsSection.style.display = 'none';
   }
@@ -1292,7 +1993,7 @@ async function renderStaticDashboard() {
   // --- Check for duplicate Tab Out tabs ---
   checkTabOutDupes();
 
-  // --- Render "Saved for Later" column ---
+  // --- Render saved tabs column ---
   await renderDeferredColumn();
 }
 
@@ -1318,6 +2019,27 @@ document.addEventListener('click', async (e) => {
   }
 
   const action = actionEl.dataset.action;
+
+  // ---- Expand/collapse the optional settings panel ----
+  if (action === 'toggle-organizer-settings') {
+    e.stopPropagation();
+    const panel = document.getElementById('customGroupsPanel');
+    if (!panel) return;
+    panel.dataset.settingsExpanded = panel.dataset.settingsExpanded === 'true' ? 'false' : 'true';
+    renderCustomGroupsPanel();
+    return;
+  }
+
+  // ---- Pick a Dunhuang background color ----
+  if (action === 'set-background-color') {
+    e.stopPropagation();
+    const theme = getDunhuangBackground(actionEl.dataset.backgroundId);
+    await setAppearanceSettings({ backgroundId: theme.id });
+    applyAppearanceSettings(appearanceSettings);
+    renderCustomGroupsPanel();
+    showToast(`Background: ${theme.name}`);
+    return;
+  }
 
   // ---- Close duplicate Tab Out tabs ----
   if (action === 'close-tabout-dupes') {
@@ -1350,7 +2072,7 @@ document.addEventListener('click', async (e) => {
     }
 
     const grouped = response.result ? response.result.groupedTabs : 0;
-    showToast(enabled ? `Auto groups on${grouped ? ` — grouped ${grouped}` : ''}` : 'Auto groups off');
+    showToast(enabled ? `Auto groups on${grouped ? ` - grouped ${grouped}` : ''}` : 'Auto groups off');
     await renderDashboard();
     return;
   }
@@ -1402,17 +2124,17 @@ document.addEventListener('click', async (e) => {
       type: GROUPING_MESSAGES.OPEN_SIDE_PANEL,
       windowId: await getCurrentWindowId(),
     });
-    showToast(response && response.ok ? 'Side panel opened' : 'Use the toolbar icon to open Panel');
+    showToast(response && response.ok ? 'Side panel opened' : 'Use the toolbar icon to open the side panel');
     return;
   }
 
-  // ---- Create a manual custom group ----
+  // ---- Create a manual group ----
   if (action === 'create-manual-group') {
     e.stopPropagation();
     const input = document.getElementById('manualGroupNameInput');
     const name = input && input.value.trim();
     if (!name) {
-      showToast('Name the custom group first');
+      showToast('Name the group first');
       return;
     }
 
@@ -1423,7 +2145,7 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // ---- Delete a manual custom group ----
+  // ---- Delete a manual group ----
   if (action === 'delete-manual-group') {
     e.stopPropagation();
     const groupId = actionEl.dataset.manualGroupId;
@@ -1432,7 +2154,7 @@ document.addEventListener('click', async (e) => {
       for (const url of result.affectedUrls) {
         await sendRuntimeMessage({ type: GROUPING_MESSAGES.APPLY_MANUAL_GROUPING, url });
       }
-      showToast('Custom group deleted');
+      showToast('Group deleted');
       await renderDashboard();
     }
     return;
@@ -1448,7 +2170,7 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // ---- Assign a tab to a manual custom group ----
+  // ---- Assign a tab to a manual group ----
   if (action === 'assign-manual-group') {
     e.stopPropagation();
     const tabUrl = actionEl.dataset.tabUrl;
@@ -1463,7 +2185,7 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // ---- Create a manual custom group and assign the tab to it ----
+  // ---- Create a manual group and assign the tab to it ----
   if (action === 'create-and-assign-manual-group') {
     e.stopPropagation();
     const menu = actionEl.closest('.manual-group-menu');
@@ -1471,7 +2193,7 @@ document.addEventListener('click', async (e) => {
     const name = input && input.value.trim();
     const tabUrl = actionEl.dataset.tabUrl;
     if (!name || !tabUrl) {
-      showToast('Name the custom group first');
+      showToast('Name the group first');
       return;
     }
 
@@ -1484,14 +2206,125 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // ---- Remove a tab from manual custom grouping ----
+  // ---- Remove a tab from manual grouping ----
   if (action === 'remove-from-manual-group') {
     e.stopPropagation();
     const tabUrl = actionEl.dataset.tabUrl;
     await removeTabFromManualGroup(tabUrl);
     await sendRuntimeMessage({ type: GROUPING_MESSAGES.APPLY_MANUAL_GROUPING, url: tabUrl });
-    showToast('Removed from custom group');
+    showToast('Removed from group');
     await renderDashboard();
+    return;
+  }
+
+  // ---- Add a site rule from the UI ----
+  if (action === 'create-custom-rule') {
+    e.stopPropagation();
+    const nameInput = document.getElementById('customRuleNameInput');
+    const hostInput = document.getElementById('customRuleHostInput');
+    const pathInput = document.getElementById('customRulePathInput');
+    const rule = await createCustomRule({
+      groupLabel: nameInput && nameInput.value,
+      hostname: hostInput && hostInput.value,
+      pathPrefix: pathInput && pathInput.value,
+    });
+    if (!rule) {
+      showToast('Add a group name and site');
+      return;
+    }
+    if (nameInput) nameInput.value = '';
+    if (hostInput) hostInput.value = '';
+    if (pathInput) pathInput.value = '';
+    await applyAutoGroupingNow();
+    showToast(`Site rule added: ${rule.groupLabel}`);
+    await renderDashboard();
+    return;
+  }
+
+  // ---- Delete a site rule ----
+  if (action === 'delete-custom-rule') {
+    e.stopPropagation();
+    const deleted = await deleteCustomRule(actionEl.dataset.ruleId);
+    if (deleted) {
+      await applyAutoGroupingNow();
+      showToast('Rule deleted');
+      await renderDashboard();
+    }
+    return;
+  }
+
+  // ---- Move rule priority ----
+  if (action === 'move-rule-priority') {
+    e.stopPropagation();
+    await moveRulePriority(actionEl.dataset.ruleType, Number(actionEl.dataset.direction || 0));
+    await applyAutoGroupingNow();
+    showToast('Rule order updated');
+    await renderDashboard();
+    return;
+  }
+
+  // ---- Save current open tabs as a set ----
+  if (action === 'save-workspace') {
+    e.stopPropagation();
+    const input = document.getElementById('workspaceNameInput');
+    const workspace = await saveCurrentWorkspace(input && input.value);
+    if (!workspace) {
+      showToast('Name the set first');
+      return;
+    }
+    if (input) input.value = '';
+    showToast(`Saved ${workspace.tabs.length} tabs`);
+    await renderDashboard();
+    return;
+  }
+
+  // ---- Open a saved set ----
+  if (action === 'restore-workspace') {
+    e.stopPropagation();
+    const opened = await restoreWorkspace(actionEl.dataset.workspaceId);
+    showToast(opened > 0 ? `Opened ${opened} tab${opened !== 1 ? 's' : ''}` : 'Set already open');
+    await renderDashboard();
+    return;
+  }
+
+  // ---- Delete a saved set ----
+  if (action === 'delete-workspace') {
+    e.stopPropagation();
+    const deleted = await deleteWorkspace(actionEl.dataset.workspaceId);
+    if (deleted) {
+      showToast('Set deleted');
+      await renderDashboard();
+    }
+    return;
+  }
+
+  // ---- Close one review tab ----
+  if (action === 'close-stale-tab') {
+    e.stopPropagation();
+    const tabId = Number(actionEl.dataset.tabId);
+    if (Number.isInteger(tabId)) await closeTabsByIds([tabId]);
+    showToast('Closed tab');
+    await renderDashboard();
+    return;
+  }
+
+  // ---- Clean up review tabs that are safe to close automatically ----
+  if (action === 'close-all-stale-tabs') {
+    e.stopPropagation();
+    const closed = await closeReviewTabsSafely(staleTabs);
+    showToast(closed > 0 ? `Closed ${closed} safe item${closed !== 1 ? 's' : ''}` : 'Nothing safe to close');
+    await renderDashboard();
+    return;
+  }
+
+  // ---- Jump to the group that contains the current tab ----
+  if (action === 'show-current-group') {
+    e.stopPropagation();
+    const card = findDomainCard(actionEl.dataset.domainId);
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('current-group-pulse');
+    setTimeout(() => card.classList.remove('current-group-pulse'), 900);
     return;
   }
 
@@ -1518,42 +2351,19 @@ document.addEventListener('click', async (e) => {
   if (action === 'close-single-tab') {
     e.stopPropagation(); // don't trigger parent chip's focus-tab
     const tabUrl = actionEl.dataset.tabUrl;
-    if (!tabUrl) return;
-
-    // Close the tab in Chrome directly
-    const allTabs = await chrome.tabs.query({});
-    const match   = allTabs.find(t => t.url === tabUrl);
-    if (match) await chrome.tabs.remove(match.id);
-    await fetchOpenTabs();
-
-    playCloseSound();
-
-    // Animate the chip row out
-    const chip = actionEl.closest('.page-chip');
-    if (chip) {
-      const rect = chip.getBoundingClientRect();
-      shootConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2);
-      chip.style.transition = 'opacity 0.2s, transform 0.2s';
-      chip.style.opacity    = '0';
-      chip.style.transform  = 'scale(0.8)';
-      setTimeout(() => {
-        chip.remove();
-        // If the card now has no tabs, remove it too
-        const parentCard = document.querySelector('.mission-card:has(.mission-pages:empty)');
-        if (parentCard) animateCardOut(parentCard);
-        document.querySelectorAll('.mission-card').forEach(c => {
-          if (c.querySelectorAll('.page-chip[data-action="focus-tab"]').length === 0) {
-            animateCardOut(c);
-          }
-        });
-      }, 200);
+    const tabId = tabIdFromElement(actionEl);
+    if (tabId !== null) {
+      await closeTabsByIds([tabId]);
+    } else if (tabUrl) {
+      const allTabs = await chrome.tabs.query({});
+      const match = allTabs.find(t => t.url === tabUrl);
+      if (match) await closeTabsByIds([match.id]);
+    } else {
+      return;
     }
-
-    // Update footer
-    const statTabs = document.getElementById('statTabs');
-    if (statTabs) statTabs.textContent = openTabs.length;
-
+    playCloseSound();
     showToast('Tab closed');
+    await renderDashboard();
     return;
   }
 
@@ -1574,22 +2384,17 @@ document.addEventListener('click', async (e) => {
     }
 
     // Close the tab in Chrome
-    const allTabs = await chrome.tabs.query({});
-    const match   = allTabs.find(t => t.url === tabUrl);
-    if (match) await chrome.tabs.remove(match.id);
-    await fetchOpenTabs();
-
-    // Animate chip out
-    const chip = actionEl.closest('.page-chip');
-    if (chip) {
-      chip.style.transition = 'opacity 0.2s, transform 0.2s';
-      chip.style.opacity    = '0';
-      chip.style.transform  = 'scale(0.8)';
-      setTimeout(() => chip.remove(), 200);
+    const tabId = tabIdFromElement(actionEl);
+    if (tabId !== null) {
+      await closeTabsByIds([tabId]);
+    } else {
+      const allTabs = await chrome.tabs.query({});
+      const match = allTabs.find(t => t.url === tabUrl);
+      if (match) await closeTabsByIds([match.id]);
     }
 
-    showToast('Saved for later');
-    await renderDeferredColumn();
+    showToast('Saved tab');
+    await renderDashboard();
     return;
   }
 
@@ -1636,21 +2441,11 @@ document.addEventListener('click', async (e) => {
   // ---- Close all tabs in a domain group ----
   if (action === 'close-domain-tabs') {
     const domainId = actionEl.dataset.domainId;
-    const group    = domainGroups.find(g => {
-      return 'domain-' + g.domain.replace(/[^a-z0-9]/g, '-') === domainId;
-    });
+    const group = domainGroups.find(g => stableDomainId(g.domain) === domainId);
     if (!group) return;
 
-    const urls      = group.tabs.map(t => t.url);
-    // Landing pages and custom groups (whose domain key isn't a real hostname)
-    // must use exact URL matching to avoid closing unrelated tabs
-    const useExact  = group.domain === '__landing-pages__' || !!group.label;
-
-    if (useExact) {
-      await closeTabsExact(urls);
-    } else {
-      await closeTabsByUrls(urls);
-    }
+    const tabIds = group.tabs.map(t => t.id).filter(Number.isInteger);
+    await closeTabsByIds(tabIds);
 
     if (card) {
       playCloseSound();
@@ -1661,8 +2456,8 @@ document.addEventListener('click', async (e) => {
     const idx = domainGroups.indexOf(group);
     if (idx !== -1) domainGroups.splice(idx, 1);
 
-    const groupLabel = group.domain === '__landing-pages__' ? 'Homepages' : (group.label || friendlyDomain(group.domain));
-    showToast(`Closed ${urls.length} tab${urls.length !== 1 ? 's' : ''} from ${groupLabel}`);
+    const groupLabel = group.domain === '__landing-pages__' ? 'Home pages' : (group.label || friendlyDomain(group.domain));
+    showToast(`Closed ${tabIds.length} tab${tabIds.length !== 1 ? 's' : ''} from ${groupLabel}`);
 
     const statTabs = document.getElementById('statTabs');
     if (statTabs) statTabs.textContent = openTabs.length;
@@ -1726,6 +2521,51 @@ document.addEventListener('click', async (e) => {
   }
 });
 
+document.addEventListener('dragstart', (e) => {
+  const chip = e.target.closest('.page-chip[data-tab-url]');
+  if (!chip) return;
+  e.dataTransfer.setData('text/tab-url', chip.dataset.tabUrl || '');
+  e.dataTransfer.setData('text/plain', chip.dataset.tabUrl || '');
+  e.dataTransfer.effectAllowed = 'move';
+  chip.classList.add('dragging');
+});
+
+document.addEventListener('dragend', (e) => {
+  const chip = e.target.closest('.page-chip');
+  if (chip) chip.classList.remove('dragging');
+  document.querySelectorAll('.custom-group-pill.drop-target').forEach(el => el.classList.remove('drop-target'));
+});
+
+document.addEventListener('dragover', (e) => {
+  const target = e.target.closest('[data-drop-action="assign-manual-group"]');
+  if (!target) return;
+  e.preventDefault();
+  target.classList.add('drop-target');
+  e.dataTransfer.dropEffect = 'move';
+});
+
+document.addEventListener('dragleave', (e) => {
+  const target = e.target.closest('[data-drop-action="assign-manual-group"]');
+  if (target) target.classList.remove('drop-target');
+});
+
+document.addEventListener('drop', async (e) => {
+  const target = e.target.closest('[data-drop-action="assign-manual-group"]');
+  if (!target) return;
+  e.preventDefault();
+  target.classList.remove('drop-target');
+
+  const tabUrl = e.dataTransfer.getData('text/tab-url');
+  const fallbackUrl = e.dataTransfer.getData('text/plain');
+  const groupId = target.dataset.manualGroupId;
+  const group = await assignTabToManualGroup(tabUrl || fallbackUrl, groupId);
+  if (group) {
+    await sendRuntimeMessage({ type: GROUPING_MESSAGES.APPLY_MANUAL_GROUPING, url: tabUrl || fallbackUrl });
+    showToast(`Added to ${group.name}`);
+    await renderDashboard();
+  }
+});
+
 // ---- Archive toggle — expand/collapse the archive section ----
 document.addEventListener('click', (e) => {
   const toggle = e.target.closest('#archiveToggle');
@@ -1746,7 +2586,20 @@ document.addEventListener('keydown', async (e) => {
     const group = await createManualGroup(groupInput.value);
     groupInput.value = '';
     renderCustomGroupsPanel();
-    showToast(group ? `Created ${group.name}` : 'Name the custom group first');
+    showToast(group ? `Created ${group.name}` : 'Name the group first');
+    return;
+  }
+
+  if (e.target.closest('#customRuleNameInput, #customRuleHostInput, #customRulePathInput')) {
+    const addButton = document.querySelector('[data-action="create-custom-rule"]');
+    if (addButton) addButton.click();
+    return;
+  }
+
+  const workspaceInput = e.target.closest('#workspaceNameInput');
+  if (workspaceInput) {
+    const saveButton = document.querySelector('[data-action="save-workspace"]');
+    if (saveButton) saveButton.click();
     return;
   }
 
@@ -1792,4 +2645,11 @@ document.addEventListener('input', async (e) => {
 /* ----------------------------------------------------------------
    INITIALIZE
    ---------------------------------------------------------------- */
-renderDashboard();
+async function initDashboard() {
+  appearanceSettings = await getAppearanceSettings();
+  applyAppearanceSettings(appearanceSettings);
+  setupLiveDashboardRefresh();
+  await renderDashboard();
+}
+
+initDashboard();
