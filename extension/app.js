@@ -168,6 +168,19 @@ async function closeTabsExact(urls) {
   await fetchOpenTabs();
 }
 
+async function closeTabsByIds(tabIds) {
+  const ids = [...new Set((tabIds || []).map(id => Number(id)).filter(Number.isInteger))];
+  if (ids.length > 0) await chrome.tabs.remove(ids);
+  await fetchOpenTabs();
+}
+
+function tabIdFromElement(el) {
+  const rawId = el && (el.dataset.tabId || el.closest('.page-chip')?.dataset.tabId);
+  if (rawId === undefined || rawId === null || rawId === '') return null;
+  const tabId = Number(rawId);
+  return Number.isInteger(tabId) ? tabId : null;
+}
+
 /**
  * focusTab(url)
  *
@@ -199,6 +212,19 @@ async function focusTab(url) {
   const match = matches.find(t => t.windowId !== currentWindow.id) || matches[0];
   await chrome.tabs.update(match.id, { active: true });
   await chrome.windows.update(match.windowId, { focused: true });
+}
+
+async function focusTabById(tabId) {
+  if (!Number.isInteger(tabId)) return false;
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab || !Number.isInteger(tab.id)) return false;
+    await chrome.tabs.update(tab.id, { active: true });
+    if (Number.isInteger(tab.windowId)) await chrome.windows.update(tab.windowId, { focused: true });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -434,6 +460,10 @@ function escapeHtml(value) {
     '"': '&quot;',
     "'": '&#39;',
   }[char]));
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
 }
 
 /**
@@ -856,6 +886,10 @@ const ICONS = {
    ---------------------------------------------------------------- */
 let domainGroups = [];
 let manualGroupsState = { groups: [], assignments: {} };
+let currentActiveTab = null;
+let dashboardRefreshTimer = null;
+let lastCenteredCurrentTabKey = '';
+let liveDashboardRefreshSetup = false;
 
 
 /* ----------------------------------------------------------------
@@ -879,6 +913,159 @@ function getRealTabs() {
       !url.startsWith('brave://')
     );
   });
+}
+
+async function getCurrentActiveRealTab() {
+  try {
+    const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const current = activeTabs.find(tab => TAB_OUT_RULES.isRealTabUrl(tab.url));
+    if (current) return current;
+  } catch {}
+
+  return openTabs.find(tab => tab.active && TAB_OUT_RULES.isRealTabUrl(tab.url)) || null;
+}
+
+function isSameTab(tab, otherTab) {
+  if (!tab || !otherTab) return false;
+  if (Number.isInteger(tab.id) && Number.isInteger(otherTab.id)) return tab.id === otherTab.id;
+  return tab.url && otherTab.url && tab.url === otherTab.url && tab.windowId === otherTab.windowId;
+}
+
+function stableDomainId(domain) {
+  return 'domain-' + String(domain || '').replace(/[^a-z0-9]/g, '-');
+}
+
+function getGroupLabel(group) {
+  if (!group) return '';
+  return group.domain === '__landing-pages__' ? 'Homepages' : (group.label || friendlyDomain(group.domain));
+}
+
+function getHostnameForTab(tab) {
+  try { return new URL(tab.url).hostname; } catch { return ''; }
+}
+
+function getTabLabel(tab) {
+  const hostname = getHostnameForTab(tab);
+  return cleanTitle(smartTitle(stripTitleNoise(tab.title || ''), tab.url), hostname) || hostname || tab.url || 'Current tab';
+}
+
+function findGroupForTab(groups, tab) {
+  if (!tab) return null;
+  return (groups || []).find(group => (group.tabs || []).some(groupTab => isSameTab(groupTab, tab))) || null;
+}
+
+function prioritizeCurrentTabGroup(groups, tab) {
+  if (!tab) return groups;
+  const index = (groups || []).findIndex(group => (group.tabs || []).some(groupTab => isSameTab(groupTab, tab)));
+  if (index <= 0) return groups;
+  const ordered = groups.slice();
+  const [currentGroup] = ordered.splice(index, 1);
+  ordered.unshift(currentGroup);
+  return ordered;
+}
+
+function findDomainCard(domainId) {
+  return Array.from(document.querySelectorAll('.mission-card[data-domain-id]')).find(card => card.dataset.domainId === domainId) || null;
+}
+
+function currentTabCenterKey(tab, group) {
+  if (!tab) return '';
+  const tabKey = Number.isInteger(tab.id) ? tab.id : `${tab.windowId || ''}:${tab.url || ''}`;
+  return `${tabKey}:${group ? group.domain || '' : 'nogroup'}`;
+}
+
+function renderCurrentTabStrip(tab, group) {
+  const strip = document.getElementById('currentTabStrip');
+  if (!strip) return;
+
+  if (!tab) {
+    strip.innerHTML = `
+      <div class="current-tab-main">
+        <div class="current-tab-copy">
+          <div class="current-tab-label">Current tab</div>
+          <div class="current-tab-title">Open a webpage to show it here</div>
+        </div>
+        <div class="current-tab-group">No active webpage detected</div>
+      </div>`;
+    strip.style.display = 'flex';
+    return;
+  }
+
+  const label = getTabLabel(tab);
+  const groupLabel = group ? getGroupLabel(group) : 'Not grouped yet';
+  const hostname = getHostnameForTab(tab);
+  const faviconUrl = hostname ? `https://www.google.com/s2/favicons?domain=${hostname}&sz=16` : '';
+  const tabId = Number.isInteger(tab.id) ? String(tab.id) : '';
+  const domainId = group ? stableDomainId(group.domain) : '';
+
+  strip.innerHTML = `
+    <div class="current-tab-main">
+      ${faviconUrl ? `<img class="current-tab-favicon" src="${faviconUrl}" alt="" onerror="this.style.display='none'">` : ''}
+      <div class="current-tab-copy">
+        <div class="current-tab-label">Current tab</div>
+        <div class="current-tab-title" title="${escapeAttr(label)}">${escapeHtml(label)}</div>
+      </div>
+      <div class="current-tab-group" title="${escapeAttr(groupLabel)}">Group: ${escapeHtml(groupLabel)}</div>
+    </div>
+    <div class="current-tab-actions">
+      ${group ? `<button class="action-btn" data-action="show-current-group" data-domain-id="${escapeAttr(domainId)}">Show group</button>` : ''}
+      <button class="action-btn close-tabs" data-action="close-single-tab" data-tab-id="${escapeAttr(tabId)}" data-tab-url="${escapeAttr(tab.url || '')}">
+        ${ICONS.close}
+        Close
+      </button>
+    </div>`;
+  strip.style.display = 'flex';
+}
+
+function centerCurrentTabInSidePanel(tab, group) {
+  const centerKey = currentTabCenterKey(tab, group);
+  if (!centerKey || centerKey === lastCenteredCurrentTabKey) return;
+  lastCenteredCurrentTabKey = centerKey;
+
+  setTimeout(() => {
+    const card = group ? findDomainCard(stableDomainId(group.domain)) : null;
+    if (!card) return;
+
+    const tabId = Number.isInteger(tab && tab.id) ? String(tab.id) : '';
+    const currentChip = tabId
+      ? Array.from(card.querySelectorAll('.page-chip[data-tab-id]')).find(chip => chip.dataset.tabId === tabId)
+      : null;
+    const target = currentChip || card;
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    card.classList.add('current-group-pulse');
+    if (currentChip) currentChip.classList.add('chip-current-pulse');
+
+    setTimeout(() => {
+      card.classList.remove('current-group-pulse');
+      if (currentChip) currentChip.classList.remove('chip-current-pulse');
+    }, 900);
+  }, 120);
+}
+
+function setupLiveDashboardRefresh() {
+  if (liveDashboardRefreshSetup) return;
+  liveDashboardRefreshSetup = true;
+
+  const schedule = (delay = 250) => {
+    if (dashboardRefreshTimer) clearTimeout(dashboardRefreshTimer);
+    dashboardRefreshTimer = setTimeout(() => {
+      dashboardRefreshTimer = null;
+      if (document.visibilityState !== 'hidden') renderDashboard();
+    }, delay);
+  };
+
+  try {
+    chrome.tabs.onActivated.addListener(() => schedule(80));
+    chrome.tabs.onCreated.addListener(() => schedule(250));
+    chrome.tabs.onRemoved.addListener(() => schedule(120));
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+      if (changeInfo.url || changeInfo.title || changeInfo.status === 'complete') schedule(250);
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') schedule(0);
+    });
+  } catch {}
 }
 
 /**
@@ -981,6 +1168,7 @@ function buildOverflowChips(hiddenTabs, urlCounts = {}) {
     const chipClass = count > 1 ? ' chip-has-dupes' : '';
     const safeUrl   = (tab.url || '').replace(/"/g, '&quot;');
     const safeTitle = label.replace(/"/g, '&quot;');
+    const safeTabId = Number.isInteger(tab.id) ? String(tab.id) : '';
     const manualGroupId = TAB_OUT_RULES.getManualGroupIdForUrl(tab.url, manualGroupsState);
     const manualAction = manualGroupId
       ? `<button class="chip-action chip-manual" data-action="remove-from-manual-group" data-tab-url="${safeUrl}" title="Remove from custom group">${ICONS.close}</button>`
@@ -988,15 +1176,15 @@ function buildOverflowChips(hiddenTabs, urlCounts = {}) {
     let domain = '';
     try { domain = new URL(tab.url).hostname; } catch {}
     const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : '';
-    return `<div class="page-chip clickable${chipClass}" data-action="focus-tab" data-tab-url="${safeUrl}" title="${safeTitle}">
+    return `<div class="page-chip clickable${chipClass}" data-action="focus-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" title="${safeTitle}">
       ${faviconUrl ? `<img class="chip-favicon" src="${faviconUrl}" alt="" onerror="this.style.display='none'">` : ''}
       <span class="chip-text">${label}</span>${dupeTag}
       <div class="chip-actions">
         ${manualAction}
-        <button class="chip-action chip-save" data-action="defer-single-tab" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Save for later">
+        <button class="chip-action chip-save" data-action="defer-single-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" data-tab-title="${safeTitle}" title="Save for later">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" /></svg>
         </button>
-        <button class="chip-action chip-close" data-action="close-single-tab" data-tab-url="${safeUrl}" title="Close this tab">
+        <button class="chip-action chip-close" data-action="close-single-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" title="Close this tab">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
         </button>
       </div>
@@ -1025,7 +1213,8 @@ function renderDomainCard(group) {
   const tabs      = group.tabs || [];
   const tabCount  = tabs.length;
   const isLanding = group.domain === '__landing-pages__';
-  const stableId  = 'domain-' + group.domain.replace(/[^a-z0-9]/g, '-');
+  const stableId  = stableDomainId(group.domain);
+  const hasCurrentTab = currentActiveTab ? tabs.some(tab => isSameTab(tab, currentActiveTab)) : false;
 
   // Count duplicates (exact URL match)
   const urlCounts = {};
@@ -1046,10 +1235,22 @@ function renderDomainCard(group) {
     : '';
 
   // Deduplicate for display: show each URL once, with (Nx) badge if duped
-  const seen = new Set();
+  const seen = new Map();
   const uniqueTabs = [];
   for (const tab of tabs) {
-    if (!seen.has(tab.url)) { seen.add(tab.url); uniqueTabs.push(tab); }
+    const key = tab.url || `tab:${tab.id}`;
+    if (!seen.has(key)) {
+      seen.set(key, uniqueTabs.length);
+      uniqueTabs.push(tab);
+    } else if (isSameTab(tab, currentActiveTab)) {
+      uniqueTabs[seen.get(key)] = tab;
+    }
+  }
+
+  const currentUniqueIndex = uniqueTabs.findIndex(tab => isSameTab(tab, currentActiveTab));
+  if (currentUniqueIndex > 0) {
+    const [currentTab] = uniqueTabs.splice(currentUniqueIndex, 1);
+    uniqueTabs.unshift(currentTab);
   }
 
   const visibleTabs = uniqueTabs.slice(0, 8);
@@ -1065,9 +1266,11 @@ function renderDomainCard(group) {
     } catch {}
     const count    = urlCounts[tab.url];
     const dupeTag  = count > 1 ? ` <span class="chip-dupe-badge">(${count}x)</span>` : '';
-    const chipClass = count > 1 ? ' chip-has-dupes' : '';
+    const isCurrent = isSameTab(tab, currentActiveTab);
+    const chipClass = `${count > 1 ? ' chip-has-dupes' : ''}${isCurrent ? ' chip-is-current' : ''}`;
     const safeUrl   = (tab.url || '').replace(/"/g, '&quot;');
     const safeTitle = label.replace(/"/g, '&quot;');
+    const safeTabId = Number.isInteger(tab.id) ? String(tab.id) : '';
     const manualGroupId = TAB_OUT_RULES.getManualGroupIdForUrl(tab.url, manualGroupsState);
     const manualAction = manualGroupId
       ? `<button class="chip-action chip-manual" data-action="remove-from-manual-group" data-tab-url="${safeUrl}" title="Remove from custom group">${ICONS.close}</button>`
@@ -1075,15 +1278,16 @@ function renderDomainCard(group) {
     let domain = '';
     try { domain = new URL(tab.url).hostname; } catch {}
     const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : '';
-    return `<div class="page-chip clickable${chipClass}" data-action="focus-tab" data-tab-url="${safeUrl}" title="${safeTitle}">
+    const currentBadge = isCurrent ? `<span class="chip-current-badge">Current</span>` : '';
+    return `<div class="page-chip clickable${chipClass}" data-action="focus-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" title="${safeTitle}">
       ${faviconUrl ? `<img class="chip-favicon" src="${faviconUrl}" alt="" onerror="this.style.display='none'">` : ''}
-      <span class="chip-text">${label}</span>${dupeTag}
+      <span class="chip-text">${label}</span>${currentBadge}${dupeTag}
       <div class="chip-actions">
         ${manualAction}
-        <button class="chip-action chip-save" data-action="defer-single-tab" data-tab-url="${safeUrl}" data-tab-title="${safeTitle}" title="Save for later">
+        <button class="chip-action chip-save" data-action="defer-single-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" data-tab-title="${safeTitle}" title="Save for later">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" /></svg>
         </button>
-        <button class="chip-action chip-close" data-action="close-single-tab" data-tab-url="${safeUrl}" title="Close this tab">
+        <button class="chip-action chip-close" data-action="close-single-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" title="Close this tab">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
         </button>
       </div>
@@ -1105,7 +1309,7 @@ function renderDomainCard(group) {
   }
 
   return `
-    <div class="mission-card domain-card ${hasDupes ? 'has-amber-bar' : 'has-neutral-bar'}" data-domain-id="${stableId}">
+    <div class="mission-card domain-card ${hasCurrentTab ? 'has-active-bar current-group-card' : hasDupes ? 'has-amber-bar' : 'has-neutral-bar'}" data-domain-id="${stableId}">
       <div class="status-bar"></div>
       <div class="mission-content">
         <div class="mission-top">
@@ -1257,6 +1461,7 @@ async function renderStaticDashboard() {
   // --- Fetch tabs ---
   await fetchOpenTabs();
   const realTabs = getRealTabs();
+  currentActiveTab = await getCurrentActiveRealTab();
   manualGroupsState = await getManualGroupsState();
   renderCustomGroupsPanel();
 
@@ -1268,7 +1473,9 @@ async function renderStaticDashboard() {
     customGroups: typeof LOCAL_CUSTOM_GROUPS !== 'undefined' ? LOCAL_CUSTOM_GROUPS : [],
     semanticGroups: typeof LOCAL_SEMANTIC_GROUPS !== 'undefined' ? LOCAL_SEMANTIC_GROUPS : [],
   });
-  domainGroups = manualGroups.concat(autoGroups);
+  domainGroups = prioritizeCurrentTabGroup(manualGroups.concat(autoGroups), currentActiveTab);
+  const currentGroup = findGroupForTab(domainGroups, currentActiveTab);
+  renderCurrentTabStrip(currentActiveTab, currentGroup);
 
   // --- Render domain cards ---
   const openTabsSection      = document.getElementById('openTabsSection');
@@ -1281,6 +1488,7 @@ async function renderStaticDashboard() {
     openTabsSectionCount.innerHTML = `${domainGroups.length} domain${domainGroups.length !== 1 ? 's' : ''} &nbsp;&middot;&nbsp; <button class="action-btn close-tabs" data-action="close-all-open-tabs" style="font-size:11px;padding:3px 10px;">${ICONS.close} Close all ${realTabs.length} tabs</button>`;
     openTabsMissionsEl.innerHTML = domainGroups.map(g => renderDomainCard(g)).join('');
     openTabsSection.style.display = 'block';
+    centerCurrentTabInSidePanel(currentActiveTab, currentGroup);
   } else if (openTabsSection) {
     openTabsSection.style.display = 'none';
   }
@@ -1497,6 +1705,17 @@ document.addEventListener('click', async (e) => {
 
   const card = actionEl.closest('.mission-card');
 
+  // ---- Jump to the group that contains the current tab ----
+  if (action === 'show-current-group') {
+    e.stopPropagation();
+    const targetCard = findDomainCard(actionEl.dataset.domainId);
+    if (!targetCard) return;
+    targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    targetCard.classList.add('current-group-pulse');
+    setTimeout(() => targetCard.classList.remove('current-group-pulse'), 900);
+    return;
+  }
+
   // ---- Expand overflow chips ("+N more") ----
   if (action === 'expand-chips') {
     const overflowContainer = actionEl.parentElement.querySelector('.page-chips-overflow');
@@ -1509,6 +1728,8 @@ document.addEventListener('click', async (e) => {
 
   // ---- Focus a specific tab ----
   if (action === 'focus-tab') {
+    const tabId = tabIdFromElement(actionEl);
+    if (tabId !== null && await focusTabById(tabId)) return;
     const tabUrl = actionEl.dataset.tabUrl;
     if (tabUrl) await focusTab(tabUrl);
     return;
@@ -1518,13 +1739,17 @@ document.addEventListener('click', async (e) => {
   if (action === 'close-single-tab') {
     e.stopPropagation(); // don't trigger parent chip's focus-tab
     const tabUrl = actionEl.dataset.tabUrl;
-    if (!tabUrl) return;
+    const tabId = tabIdFromElement(actionEl);
+    if (tabId === null && !tabUrl) return;
 
     // Close the tab in Chrome directly
-    const allTabs = await chrome.tabs.query({});
-    const match   = allTabs.find(t => t.url === tabUrl);
-    if (match) await chrome.tabs.remove(match.id);
-    await fetchOpenTabs();
+    if (tabId !== null) {
+      await closeTabsByIds([tabId]);
+    } else {
+      const allTabs = await chrome.tabs.query({});
+      const match = allTabs.find(t => t.url === tabUrl);
+      if (match) await closeTabsByIds([match.id]);
+    }
 
     playCloseSound();
 
@@ -1562,6 +1787,7 @@ document.addEventListener('click', async (e) => {
     e.stopPropagation();
     const tabUrl   = actionEl.dataset.tabUrl;
     const tabTitle = actionEl.dataset.tabTitle || tabUrl;
+    const tabId = tabIdFromElement(actionEl);
     if (!tabUrl) return;
 
     // Save to chrome.storage.local
@@ -1574,10 +1800,13 @@ document.addEventListener('click', async (e) => {
     }
 
     // Close the tab in Chrome
-    const allTabs = await chrome.tabs.query({});
-    const match   = allTabs.find(t => t.url === tabUrl);
-    if (match) await chrome.tabs.remove(match.id);
-    await fetchOpenTabs();
+    if (tabId !== null) {
+      await closeTabsByIds([tabId]);
+    } else {
+      const allTabs = await chrome.tabs.query({});
+      const match = allTabs.find(t => t.url === tabUrl);
+      if (match) await closeTabsByIds([match.id]);
+    }
 
     // Animate chip out
     const chip = actionEl.closest('.page-chip');
@@ -1636,9 +1865,7 @@ document.addEventListener('click', async (e) => {
   // ---- Close all tabs in a domain group ----
   if (action === 'close-domain-tabs') {
     const domainId = actionEl.dataset.domainId;
-    const group    = domainGroups.find(g => {
-      return 'domain-' + g.domain.replace(/[^a-z0-9]/g, '-') === domainId;
-    });
+    const group    = domainGroups.find(g => stableDomainId(g.domain) === domainId);
     if (!group) return;
 
     const urls      = group.tabs.map(t => t.url);
@@ -1792,4 +2019,5 @@ document.addEventListener('input', async (e) => {
 /* ----------------------------------------------------------------
    INITIALIZE
    ---------------------------------------------------------------- */
+setupLiveDashboardRefresh();
 renderDashboard();

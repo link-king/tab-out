@@ -17,6 +17,8 @@ No server. No account. No external API calls. Just a Chrome extension.
 - **Manual custom groups** for tabs you want to control yourself. Once a tab is added manually, auto grouping skips it.
 - **One-click group controls** to group now, expand all groups, collapse all groups, or open Tab Out in Chrome's side panel.
 - **Shared grouping rules** so the Tab Out dashboard and Chrome's native tab groups use the same names.
+- **Current tab focus** keeps the page you are looking at visible at the top, moves its group to the front, and centers it in the side panel.
+- **Tab-aware actions** focus, close, or save the exact tab you clicked, even when several tabs share the same URL.
 - **Local override hooks** for personal homepage, semantic, and custom rules without changing the main extension code.
 
 ---
@@ -41,6 +43,8 @@ The agent will walk you through it. Takes about 1 minute.
 - **Semantic grouping** pulls AI, Dev, Docs, Work, Finance, Reading, Social, Video, and Shopping tabs together
 - **Manual custom groups** let you put specific tabs where you want them, and auto grouping leaves them alone
 - **One-click controls** group tabs now, expand all groups, collapse all groups, or open Tab Out in the side panel
+- **Current tab strip** shows the active page and its group, with a shortcut to jump to that group or close only that tab
+- **Automatic side-panel refresh** follows tab switches, new tabs, navigations, and closed tabs while the panel is open
 - **Shared rules** keep the Tab Out dashboard and Chrome's native tab groups using the same names
 - **Personal grouping config** lets you add local homepage, semantic, or custom rules without changing the core extension
 - **Close tabs with style** with swoosh sound + confetti burst
@@ -80,6 +84,8 @@ You'll see Tab Out.
 ```
 You open a new tab
   -> Tab Out shows your open tabs grouped by manual, semantic, or domain rules
+  -> The active page appears in a Current tab strip at the top
+  -> Its group is moved to the front and the matching tab is centered in the side panel
   -> Homepages (Gmail, X, etc.) get their own group at the top
   -> Chrome's native tab groups get the same names
   -> Manual custom groups stay separate from auto grouping
@@ -89,6 +95,8 @@ You open a new tab
 ```
 
 Everything runs inside the Chrome extension. No external server, no API calls, no data sent anywhere. Saved tabs, auto-group settings, and manual custom groups are stored in `chrome.storage.local`.
+
+The Current tab view updates from Chrome tab events while the new-tab page or side panel is visible. Actions use Chrome tab IDs when available, so closing or saving one duplicate page does not affect its siblings.
 
 ---
 
