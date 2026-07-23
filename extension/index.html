@@ -27,7 +27,7 @@
       <div class="date" id="dateDisplay"></div>
     </div>
     <div class="header-actions">
-      <label class="auto-group-toggle" title="Automatically group Chrome tabs">
+      <label class="auto-group-toggle" title="Automatically place Chrome tabs into native tab groups">
         <input type="checkbox" id="autoGroupToggle" data-action="toggle-auto-group">
         <span class="toggle-track" aria-hidden="true"></span>
         <span id="autoGroupLabel">Auto groups</span>
@@ -35,7 +35,7 @@
       <button class="action-btn primary" data-action="group-tabs-now" title="Group open tabs">Group now</button>
       <button class="action-btn" data-action="expand-tab-groups" title="Expand all tab groups in this window">Expand</button>
       <button class="action-btn" data-action="collapse-tab-groups" title="Collapse all tab groups in this window">Collapse</button>
-      <button class="action-btn" data-action="open-side-panel" title="Open side panel">Side panel</button>
+      <button class="action-btn" data-action="open-side-panel" title="Open side panel">Panel</button>
     </div>
   </header>
 
@@ -56,8 +56,6 @@
     </div>
     <button class="tab-cleanup-btn" data-action="close-tabout-dupes">Close extras</button>
   </div>
-
-  <div class="current-tab-strip" id="currentTabStrip" style="display:none"></div>
 
   <!-- ================================================================
        MAIN CONTENT AREA — two-column layout
@@ -81,7 +79,7 @@
     <!-- RIGHT COLUMN: Saved for Later checklist -->
     <div class="deferred-column" id="deferredColumn" style="display:none">
       <div class="section-header">
-        <h2>Saved tabs</h2>
+        <h2>Saved for later</h2>
         <div class="section-line"></div>
         <div class="section-count" id="deferredCount"></div>
       </div>
@@ -98,11 +96,11 @@
       <div class="deferred-archive" id="deferredArchive" style="display:none">
         <button class="archive-toggle" id="archiveToggle">
           <svg class="archive-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
-          Done
+          Archive
           <span class="archive-count" id="archiveCount"></span>
         </button>
         <div class="archive-body" id="archiveBody" style="display:none">
-          <input type="text" class="archive-search" id="archiveSearch" placeholder="Search done tabs...">
+          <input type="text" class="archive-search" id="archiveSearch" placeholder="Search archived tabs...">
           <div class="archive-list" id="archiveList"></div>
         </div>
       </div>
@@ -117,7 +115,7 @@
     <div class="footer-stats">
       <div class="stat">
         <div class="stat-num" id="statTabs">—</div>
-        <div class="stat-label">Tabs open</div>
+        <div class="stat-label">Open tabs</div>
       </div>
     </div>
     <div class="last-refresh">

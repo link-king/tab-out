@@ -4,22 +4,14 @@
 
   const UNGROUPED_TAB_ID = -1;
   const MANUAL_GROUPS_STORAGE_KEY = 'tabOutManualGroups';
-  const RULE_SETTINGS_STORAGE_KEY = 'tabOutRuleSettings';
-  const WORKSPACES_STORAGE_KEY = 'tabOutWorkspaces';
-  const DEFAULT_RULE_ORDER = ['landing', 'custom', 'semantic'];
 
   const REAL_TAB_EXCLUDED_PREFIXES = [
     'about:',
-    'blob:',
     'brave://',
     'chrome-extension://',
-    'chrome-search://',
     'chrome://',
-    'data:',
     'devtools://',
     'edge://',
-    'filesystem:',
-    'javascript:',
   ];
 
   const DEFAULT_LANDING_PAGE_PATTERNS = [
@@ -356,12 +348,6 @@
     return Array.isArray(value) ? value : [value];
   }
 
-  function normalizePathPrefix(value) {
-    const trimmed = String(value || '').trim();
-    if (!trimmed) return '';
-    return trimmed.startsWith('/') ? trimmed : '/' + trimmed;
-  }
-
   function hostnameEndsWithSuffix(hostname, suffix) {
     const normalized = normalizeHostname(hostname);
     const normalizedSuffix = normalizeHostname(suffix).replace(/^\./, '');
@@ -412,102 +398,6 @@
     let hash = 0;
     for (const char of value) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
     return colors[Math.abs(hash) % colors.length];
-  }
-
-  function normalizeRuleOrder(rawOrder) {
-    const allowed = new Set(DEFAULT_RULE_ORDER);
-    const order = [];
-    for (const item of rawOrder || []) {
-      if (allowed.has(item) && !order.includes(item)) order.push(item);
-    }
-    for (const item of DEFAULT_RULE_ORDER) {
-      if (!order.includes(item)) order.push(item);
-    }
-    return order;
-  }
-
-  function normalizeRuleSettings(rawSettings) {
-    const raw = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
-    const customGroups = [];
-    const seenIds = new Set();
-
-    for (const rule of raw.customGroups || []) {
-      if (!rule) continue;
-      const groupLabel = String(rule.groupLabel || rule.label || rule.name || '').trim().slice(0, 40);
-      const id = String(rule.id || rule.groupKey || groupLabel || Date.now()).trim();
-      if (!id || !groupLabel || seenIds.has(id)) continue;
-
-      const normalizedRule = {
-        id,
-        groupKey: rule.groupKey || 'rule:' + id,
-        groupLabel,
-        color: rule.color || colorFromString(groupLabel),
-        sortOrder: typeof rule.sortOrder === 'number' ? rule.sortOrder : customGroups.length,
-        createdAt: rule.createdAt || new Date().toISOString(),
-        updatedAt: rule.updatedAt || rule.createdAt || new Date().toISOString(),
-      };
-
-      if (rule.hostname) normalizedRule.hostname = normalizeHostname(rule.hostname);
-      if (rule.hostnameEndsWith) normalizedRule.hostnameEndsWith = normalizeHostname(rule.hostnameEndsWith).replace(/^\./, '');
-      if (rule.hostnameSuffixes) normalizedRule.hostnameSuffixes = toList(rule.hostnameSuffixes)
-        .map(suffix => normalizeHostname(suffix).replace(/^\./, ''))
-        .filter(Boolean);
-      if (rule.hostnames) normalizedRule.hostnames = toList(rule.hostnames).map(normalizeHostname).filter(Boolean);
-      if (rule.pathPrefix) {
-        const prefixes = toList(rule.pathPrefix).map(normalizePathPrefix).filter(Boolean);
-        if (prefixes.length === 1) normalizedRule.pathPrefix = prefixes[0];
-        else if (prefixes.length > 1) normalizedRule.pathPrefix = prefixes;
-      }
-      if (rule.pathExact) normalizedRule.pathExact = rule.pathExact;
-
-      if (
-        normalizedRule.hostname ||
-        normalizedRule.hostnameEndsWith ||
-        normalizedRule.hostnameSuffixes ||
-        normalizedRule.hostnames
-      ) {
-        seenIds.add(id);
-        customGroups.push(normalizedRule);
-      }
-    }
-
-    return {
-      ruleOrder: normalizeRuleOrder(raw.ruleOrder),
-      customGroups,
-    };
-  }
-
-  function normalizeWorkspacesState(rawState) {
-    const raw = rawState && typeof rawState === 'object' ? rawState : {};
-    const workspaces = [];
-    const seenIds = new Set();
-
-    for (const workspace of raw.workspaces || []) {
-      if (!workspace || !workspace.id || !workspace.name || seenIds.has(String(workspace.id))) continue;
-      const tabs = [];
-      const seenUrls = new Set();
-      for (const tab of workspace.tabs || []) {
-        if (!tab || !tab.url || seenUrls.has(tab.url)) continue;
-        seenUrls.add(tab.url);
-        tabs.push({
-          url: tab.url,
-          title: tab.title || tab.url,
-          savedAt: tab.savedAt || workspace.createdAt || new Date().toISOString(),
-        });
-      }
-      if (tabs.length === 0) continue;
-      const id = String(workspace.id);
-      seenIds.add(id);
-      workspaces.push({
-        id,
-        name: String(workspace.name).trim().slice(0, 48),
-        tabs,
-        createdAt: workspace.createdAt || new Date().toISOString(),
-        updatedAt: workspace.updatedAt || workspace.createdAt || new Date().toISOString(),
-      });
-    }
-
-    return { workspaces };
   }
 
   function normalizeManualGroupsState(rawState) {
@@ -640,74 +530,55 @@
     }) || null;
   }
 
-  function ruleOrderBase(ruleOrder, type, fallback) {
-    const normalizedOrder = normalizeRuleOrder(ruleOrder);
-    const index = normalizedOrder.indexOf(type);
-    return index === -1 ? fallback : index * 100;
-  }
-
-  function addGroupedTab(groupMap, key, group, tab) {
-    if (!groupMap[key]) groupMap[key] = { ...group, tabs: [] };
-    groupMap[key].tabs.push(tab);
-  }
-
   function getDashboardGroups(tabs, options) {
     const groupMap = {};
+    const landingTabs = [];
     const landingPatterns = getLandingPatterns(options && options.landingPagePatterns);
     const customGroups = options && options.customGroups ? options.customGroups : [];
     const semanticGroups = options && options.semanticGroups ? options.semanticGroups : [];
-    const ruleOrder = normalizeRuleOrder(options && options.ruleOrder);
 
     for (const tab of tabs || []) {
       try {
         if (!isRealTabUrl(tab.url)) continue;
 
-        let grouped = false;
-        for (const ruleType of ruleOrder) {
-          if (ruleType === 'landing' && isLandingPage(tab.url, options && options.landingPagePatterns)) {
-            addGroupedTab(groupMap, '__landing-pages__', {
-              domain: '__landing-pages__',
-              label: 'Home pages',
-              color: 'yellow',
-              sortOrder: ruleOrderBase(ruleOrder, 'landing', 0),
-            }, tab);
-            grouped = true;
-            break;
-          }
-
-          if (ruleType === 'custom') {
-            const customRule = matchCustomGroup(tab.url, customGroups);
-            if (customRule) {
-              const key = customRule.groupKey;
-              addGroupedTab(groupMap, key, {
-                domain: key,
-                label: customRule.groupLabel,
-                color: customRule.color || colorFromString(key),
-                isCustom: true,
-                sortOrder: ruleOrderBase(ruleOrder, 'custom', 100) + ((customRule.sortOrder || 0) / 1000),
-              }, tab);
-              grouped = true;
-              break;
-            }
-          }
-
-          if (ruleType === 'semantic') {
-            const semanticRule = matchSemanticGroup(tab.url, semanticGroups);
-            if (semanticRule) {
-              const key = semanticKey(semanticRule);
-              addGroupedTab(groupMap, key, {
-                domain: key,
-                label: semanticRule.groupLabel || semanticRule.label,
-                color: semanticRule.color || colorFromString(key),
-                isSemantic: true,
-                sortOrder: ruleOrderBase(ruleOrder, 'semantic', 500) + ((semanticRule.sortOrder || 0) / 1000),
-              }, tab);
-              grouped = true;
-              break;
-            }
-          }
+        if (isLandingPage(tab.url, options && options.landingPagePatterns)) {
+          landingTabs.push(tab);
+          continue;
         }
-        if (grouped) continue;
+
+        const customRule = matchCustomGroup(tab.url, customGroups);
+        if (customRule) {
+          const key = customRule.groupKey;
+          if (!groupMap[key]) {
+            groupMap[key] = {
+              domain: key,
+              label: customRule.groupLabel,
+              color: customRule.color || colorFromString(key),
+              isCustom: true,
+              sortOrder: customRule.sortOrder || 100,
+              tabs: [],
+            };
+          }
+          groupMap[key].tabs.push(tab);
+          continue;
+        }
+
+        const semanticRule = matchSemanticGroup(tab.url, semanticGroups);
+        if (semanticRule) {
+          const key = semanticKey(semanticRule);
+          if (!groupMap[key]) {
+            groupMap[key] = {
+              domain: key,
+              label: semanticRule.groupLabel || semanticRule.label,
+              color: semanticRule.color || colorFromString(key),
+              isSemantic: true,
+              sortOrder: semanticRule.sortOrder || 500,
+              tabs: [],
+            };
+          }
+          groupMap[key].tabs.push(tab);
+          continue;
+        }
 
         const spec = getTabGroupSpec(tab);
         if (!spec) continue;
@@ -716,6 +587,10 @@
       } catch {
         // Skip malformed or inaccessible URLs.
       }
+    }
+
+    if (landingTabs.length > 0) {
+      groupMap['__landing-pages__'] = { domain: '__landing-pages__', label: 'Homepages', color: 'yellow', sortOrder: 0, tabs: landingTabs };
     }
 
     const landingHostnames = new Set(landingPatterns.map(pattern => pattern.hostname).filter(Boolean));
@@ -745,9 +620,6 @@
   global.TAB_OUT_RULES = {
     UNGROUPED_TAB_ID,
     MANUAL_GROUPS_STORAGE_KEY,
-    RULE_SETTINGS_STORAGE_KEY,
-    WORKSPACES_STORAGE_KEY,
-    DEFAULT_RULE_ORDER,
     DEFAULT_LANDING_PAGE_PATTERNS,
     DEFAULT_SEMANTIC_GROUPS,
     REAL_TAB_EXCLUDED_PREFIXES,
@@ -763,7 +635,5 @@
     matchSemanticGroup,
     normalizeHostname,
     normalizeManualGroupsState,
-    normalizeRuleSettings,
-    normalizeWorkspacesState,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : self);

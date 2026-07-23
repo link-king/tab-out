@@ -80,30 +80,10 @@ async function getManualGroupsState() {
   return TAB_OUT_RULES.normalizeManualGroupsState(result[TAB_OUT_RULES.MANUAL_GROUPS_STORAGE_KEY]);
 }
 
-async function getRuleSettings() {
-  const result = await chrome.storage.local.get(TAB_OUT_RULES.RULE_SETTINGS_STORAGE_KEY);
-  return TAB_OUT_RULES.normalizeRuleSettings(result[TAB_OUT_RULES.RULE_SETTINGS_STORAGE_KEY]);
-}
-
 // ─── Native Chrome Tab Groups ────────────────────────────────────────────────
 
 function bucketKey(windowId, spec) {
   return `${windowId}:${spec.key}`;
-}
-
-function addTabBucket(buckets, windowId, spec, tabIds) {
-  const ids = (tabIds || []).filter(id => typeof id === 'number');
-  if (!ids.length) return;
-
-  const key = bucketKey(windowId, spec);
-  if (!buckets.has(key)) {
-    buckets.set(key, {
-      windowId,
-      spec,
-      tabIds: [],
-    });
-  }
-  buckets.get(key).tabIds.push(...ids);
 }
 
 async function getExistingGroup(windowId, label) {
@@ -131,12 +111,11 @@ async function ensureChromeGroup(windowId, spec, tabIds) {
 async function groupTabs(tabs, options = {}) {
   const includeAlreadyGrouped = options.includeAlreadyGrouped === true;
   const manualGroupsState = options.manualGroupsState || await getManualGroupsState();
-  const ruleSettings = options.ruleSettings || await getRuleSettings();
   const buckets = new Map();
   let skippedGrouped = 0;
   let skippedPinned = 0;
   let skippedInternal = 0;
-  let manualGrouped = 0;
+  let skippedManual = 0;
   const candidateTabs = [];
 
   for (const tab of tabs) {
@@ -150,17 +129,8 @@ async function groupTabs(tabs, options = {}) {
       skippedInternal += 1;
       continue;
     }
-
-    const manualGroupId = TAB_OUT_RULES.getManualGroupIdForUrl(tab.url, manualGroupsState);
-    const manualGroup = manualGroupsState.groups.find(group => group.id === manualGroupId);
-    if (manualGroup) {
-      addTabBucket(buckets, tab.windowId, {
-        key: 'manual:' + manualGroup.id,
-        label: manualGroup.name,
-        color: manualGroup.color || 'grey',
-        isManual: true,
-      }, [tab.id]);
-      manualGrouped += 1;
+    if (TAB_OUT_RULES.isManualGroupedTab(tab, manualGroupsState)) {
+      skippedManual += 1;
       continue;
     }
     if (!includeAlreadyGrouped && tab.groupId !== TAB_OUT_RULES.UNGROUPED_TAB_ID) {
@@ -180,9 +150,8 @@ async function groupTabs(tabs, options = {}) {
   for (const [windowId, windowTabs] of tabsByWindow.entries()) {
     const groups = TAB_OUT_RULES.getDashboardGroups(windowTabs, {
       landingPagePatterns: typeof LOCAL_LANDING_PAGE_PATTERNS !== 'undefined' ? LOCAL_LANDING_PAGE_PATTERNS : [],
-      customGroups: ruleSettings.customGroups.concat(typeof LOCAL_CUSTOM_GROUPS !== 'undefined' ? LOCAL_CUSTOM_GROUPS : []),
+      customGroups: typeof LOCAL_CUSTOM_GROUPS !== 'undefined' ? LOCAL_CUSTOM_GROUPS : [],
       semanticGroups: typeof LOCAL_SEMANTIC_GROUPS !== 'undefined' ? LOCAL_SEMANTIC_GROUPS : [],
-      ruleOrder: ruleSettings.ruleOrder,
     });
     for (const group of groups) {
       const spec = {
@@ -191,7 +160,15 @@ async function groupTabs(tabs, options = {}) {
         color: group.color || 'grey',
         isCustom: group.isCustom === true,
       };
-      addTabBucket(buckets, windowId, spec, group.tabs.map(tab => tab.id));
+      const key = bucketKey(windowId, spec);
+      if (!buckets.has(key)) {
+        buckets.set(key, {
+          windowId,
+          spec,
+          tabIds: [],
+        });
+      }
+      buckets.get(key).tabIds.push(...group.tabs.map(tab => tab.id));
     }
   }
 
@@ -218,8 +195,7 @@ async function groupTabs(tabs, options = {}) {
     skippedGrouped,
     skippedPinned,
     skippedInternal,
-    skippedManual: manualGrouped,
-    manualGrouped,
+    skippedManual,
     touchedLabels: [...new Set(touchedLabels)],
   };
 }
@@ -231,7 +207,6 @@ async function groupAllOpenTabs(options = {}) {
 
 async function applyManualGroupingForUrl(url) {
   const manualGroupsState = await getManualGroupsState();
-  const ruleSettings = await getRuleSettings();
   const groupId = TAB_OUT_RULES.getManualGroupIdForUrl(url, manualGroupsState);
   const manualGroup = manualGroupsState.groups.find(group => group.id === groupId);
   const allTabs = await chrome.tabs.query({});
@@ -239,7 +214,7 @@ async function applyManualGroupingForUrl(url) {
 
   if (!manualGroup || tabs.length === 0) {
     if (!manualGroup && tabs.length > 0) {
-      return groupTabs(tabs, { includeAlreadyGrouped: true, manualGroupsState, ruleSettings });
+      return groupTabs(tabs, { includeAlreadyGrouped: true, manualGroupsState });
     }
     return { groupedTabs: 0, groupsTouched: 0, skippedManual: 0 };
   }
@@ -299,7 +274,6 @@ function scheduleTabGrouping(tabId, delay = 800) {
 async function getGroupingState() {
   const settings = await getAutoGroupSettings();
   const manualGroupsState = await getManualGroupsState();
-  const ruleSettings = await getRuleSettings();
   const tabs = await chrome.tabs.query({});
   const realTabs = tabs.filter(t => TAB_OUT_RULES.isRealTabUrl(t.url) && !t.pinned);
   const ungroupedTabs = realTabs.filter(t => t.groupId === TAB_OUT_RULES.UNGROUPED_TAB_ID);
@@ -308,7 +282,6 @@ async function getGroupingState() {
   return {
     settings,
     manualGroups: manualGroupsState.groups,
-    ruleSettings,
     rules: TAB_OUT_RULES.DEFAULT_SEMANTIC_GROUPS.map(rule => ({
       key: rule.key,
       label: rule.label,
@@ -337,16 +310,6 @@ async function setGroupsCollapsed(windowId, collapsed) {
     totalGroups: groups.length,
     collapsed,
   };
-}
-
-async function expandGroupForTab(tabId) {
-  try {
-    const tab = await chrome.tabs.get(tabId);
-    if (!tab || tab.groupId === TAB_OUT_RULES.UNGROUPED_TAB_ID) return;
-    await chrome.tabGroups.update(tab.groupId, { collapsed: false });
-  } catch {
-    // The tab may have closed before Chrome resolves the lookup.
-  }
 }
 
 // ─── Side panel ──────────────────────────────────────────────────────────────
@@ -455,11 +418,6 @@ chrome.runtime.onStartup.addListener(async () => {
 chrome.tabs.onCreated.addListener(tab => {
   updateBadge();
   scheduleTabGrouping(tab.id);
-});
-
-chrome.tabs.onActivated.addListener(({ tabId }) => {
-  updateBadge();
-  expandGroupForTab(tabId);
 });
 
 chrome.tabs.onRemoved.addListener(() => {
