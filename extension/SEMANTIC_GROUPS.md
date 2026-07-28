@@ -23,6 +23,10 @@ contain lots of security, ad, adult, regional, and infrastructure categories
 that make tab grouping noisy. Keep the built-in list small and add personal
 rules through `LOCAL_SEMANTIC_GROUPS` when needed.
 
+Local overrides are declarative so the background worker can share the exact
+same rules with the dashboard. Use hostname and path fields; function-based
+`test` callbacks are ignored.
+
 Example local override:
 
 ```js

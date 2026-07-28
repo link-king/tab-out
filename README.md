@@ -6,7 +6,7 @@ Tab Out is a Chrome extension that replaces your new tab page with a dashboard o
 
 Forked from [zarazhangrui/tab-out](https://github.com/zarazhangrui/tab-out).
 
-No server. No account. No external API calls. Just a Chrome extension.
+No server. No account. No tab-data uploads. Just a Chrome extension.
 
 ---
 
@@ -19,6 +19,9 @@ No server. No account. No external API calls. Just a Chrome extension.
 - **Shared grouping rules** so the Tab Out dashboard and Chrome's native tab groups use the same names.
 - **Current tab focus** keeps the page you are looking at visible at the top, moves its group to the front, and centers it in the side panel.
 - **Tab-aware actions** focus, close, or save the exact tab you clicked, even when several tabs share the same URL.
+- **Resource Saver** pauses inactive tabs in place to release page memory while protecting the current, pinned, and audible tabs.
+- **Quick Return** keeps sleeping tabs and tabs closed through Tab Out at the top for fast reopening, with up to 200 closed tabs retained locally for 72 hours.
+- **33 Dunhuang background colors** let you switch the dashboard palette from a compact, collapsible color picker, with your choice saved locally.
 - **Local override hooks** for personal homepage, semantic, and custom rules without changing the main extension code.
 
 ---
@@ -44,6 +47,11 @@ The agent will walk you through it. Takes about 1 minute.
 - **Manual custom groups** let you put specific tabs where you want them, and auto grouping leaves them alone
 - **One-click controls** group tabs now, expand all groups, collapse all groups, or open Tab Out in the side panel
 - **Current tab strip** shows the active page and its group, with a shortcut to jump to that group or close only that tab
+- **Resource Saver** pauses safe inactive tabs with `chrome.tabs.discard`, while current, pinned, and audio-playing tabs stay awake
+- **Quick Return** puts sleeping and recently closed tabs in one easy-to-find list instead of burying them in browser history, keeping up to 200 closed items for 72 hours
+- **33 Dunhuang background colors** provide a compact appearance picker that remembers your selected palette
+- **Group-aware restore** reopens a recently closed tab in its previous Chrome group when possible
+- **Chrome Task Manager guide** shows Mac users the correct menu path for live CPU diagnosis instead of opening a blocked `chrome://` page or showing guessed percentages
 - **Automatic side-panel refresh** follows tab switches, new tabs, navigations, and closed tabs while the panel is open
 - **Shared rules** keep the Tab Out dashboard and Chrome's native tab groups using the same names
 - **Personal grouping config** lets you add local homepage, semantic, or custom rules without changing the core extension
@@ -53,7 +61,7 @@ The agent will walk you through it. Takes about 1 minute.
 - **Save for later** bookmark tabs to a checklist before closing them
 - **Localhost grouping** shows port numbers next to each tab so you can tell your vibe coding projects apart
 - **Expandable groups** show the first 8 tabs with a clickable "+N more"
-- **100% local** your data never leaves your machine
+- **Local storage** tab data stays in `chrome.storage.local`; Tab Out does not upload your tab list or saved items
 - **Pure Chrome extension** no server, no Node.js, no npm, no setup beyond loading the extension
 
 ---
@@ -89,12 +97,15 @@ You open a new tab
   -> Homepages (Gmail, X, etc.) get their own group at the top
   -> Chrome's native tab groups get the same names
   -> Manual custom groups stay separate from auto grouping
+  -> Pause inactive tabs to release page memory without closing the whole session
+  -> Sleeping and recently closed tabs stay visible in Quick Return
+  -> Restore a closed tab back into its previous Chrome group
   -> Click any tab title to jump to it
   -> Close groups you're done with (swoosh + confetti)
   -> Save tabs for later before closing them
 ```
 
-Everything runs inside the Chrome extension. No external server, no API calls, no data sent anywhere. Saved tabs, auto-group settings, and manual custom groups are stored in `chrome.storage.local`.
+Everything runs inside the Chrome extension. There is no external server, account, analytics, or remote API for your tab data. Saved tabs, Quick Return items, appearance settings, auto-group settings, and manual custom groups are stored in `chrome.storage.local`. Chrome-provided favicon URLs may still be loaded by the browser when icons are available.
 
 The Current tab view updates from Chrome tab events while the new-tab page or side panel is visible. Actions use Chrome tab IDs when available, so closing or saving one duplicate page does not affect its siblings.
 
@@ -106,6 +117,7 @@ The Current tab view updates from Chrome tab events while the new-tab page or si
 |------|-----|
 | Extension | Chrome Manifest V3 |
 | Native grouping | chrome.tabs + chrome.tabGroups |
+| Tab lifecycle | chrome.tabs.discard |
 | Side panel | chrome.sidePanel |
 | Storage | chrome.storage.local |
 | Sound | Web Audio API (synthesized, no files) |

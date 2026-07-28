@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tab Out",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Keep tabs on your tabs. New tab page and side panel that groups your open tabs by domain.",
   "permissions": ["tabs", "tabGroups", "activeTab", "storage", "sidePanel"],
   "chrome_url_overrides": { "newtab": "index.html" },

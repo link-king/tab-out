@@ -4,6 +4,17 @@
 
   const UNGROUPED_TAB_ID = -1;
   const MANUAL_GROUPS_STORAGE_KEY = 'tabOutManualGroups';
+  const CHROME_GROUP_COLORS = new Set([
+    'blue',
+    'cyan',
+    'green',
+    'grey',
+    'orange',
+    'pink',
+    'purple',
+    'red',
+    'yellow',
+  ]);
 
   const REAL_TAB_EXCLUDED_PREFIXES = [
     'about:',
@@ -335,7 +346,9 @@
 
   function isRealTabUrl(url) {
     if (!url) return false;
-    return !REAL_TAB_EXCLUDED_PREFIXES.some(prefix => url.startsWith(prefix));
+    if (REAL_TAB_EXCLUDED_PREFIXES.some(prefix => url.startsWith(prefix))) return false;
+    const parsed = parseTabUrl(url);
+    return !!parsed && ['http:', 'https:', 'file:'].includes(parsed.protocol);
   }
 
   function parseTabUrl(url) {
@@ -346,6 +359,54 @@
   function toList(value) {
     if (!value) return [];
     return Array.isArray(value) ? value : [value];
+  }
+
+  const DECLARATIVE_RULE_KEYS = new Set([
+    'color',
+    'groupKey',
+    'groupLabel',
+    'hostname',
+    'hostnameEndsWith',
+    'hostnameSuffixes',
+    'hostnames',
+    'key',
+    'label',
+    'pathExact',
+    'pathPrefix',
+    'sortOrder',
+  ]);
+
+  function normalizeDeclarativeRule(rule) {
+    if (!rule || typeof rule !== 'object' || typeof rule.test === 'function') return null;
+    const normalized = {};
+
+    for (const [key, value] of Object.entries(rule)) {
+      if (!DECLARATIVE_RULE_KEYS.has(key)) continue;
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        normalized[key] = value;
+        continue;
+      }
+      if (Array.isArray(value)) {
+        normalized[key] = value.filter(item =>
+          typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean'
+        );
+      }
+    }
+
+    return Object.keys(normalized).length > 0 ? normalized : null;
+  }
+
+  function normalizeRuleOverrides(rawOverrides) {
+    const raw = rawOverrides && typeof rawOverrides === 'object' ? rawOverrides : {};
+    const normalizeList = value => (Array.isArray(value) ? value : [])
+      .map(normalizeDeclarativeRule)
+      .filter(Boolean);
+
+    return {
+      landingPagePatterns: normalizeList(raw.landingPagePatterns),
+      customGroups: normalizeList(raw.customGroups),
+      semanticGroups: normalizeList(raw.semanticGroups),
+    };
   }
 
   function hostnameEndsWithSuffix(hostname, suffix) {
@@ -400,6 +461,10 @@
     return colors[Math.abs(hash) % colors.length];
   }
 
+  function normalizeGroupColor(value, fallback = 'grey') {
+    return CHROME_GROUP_COLORS.has(value) ? value : fallback;
+  }
+
   function normalizeManualGroupsState(rawState) {
     const raw = rawState && typeof rawState === 'object' ? rawState : {};
     const seenIds = new Set();
@@ -413,7 +478,7 @@
       groups.push({
         id,
         name: String(group.name).trim().slice(0, 40),
-        color: group.color || colorFromString(group.name),
+        color: normalizeGroupColor(group.color, colorFromString(group.name)),
         createdAt: group.createdAt || new Date().toISOString(),
         updatedAt: group.updatedAt || group.createdAt || new Date().toISOString(),
       });
@@ -553,7 +618,7 @@
             groupMap[key] = {
               domain: key,
               label: customRule.groupLabel,
-              color: customRule.color || colorFromString(key),
+              color: normalizeGroupColor(customRule.color, colorFromString(key)),
               isCustom: true,
               sortOrder: customRule.sortOrder || 100,
               tabs: [],
@@ -570,7 +635,7 @@
             groupMap[key] = {
               domain: key,
               label: semanticRule.groupLabel || semanticRule.label,
-              color: semanticRule.color || colorFromString(key),
+              color: normalizeGroupColor(semanticRule.color, colorFromString(key)),
               isSemantic: true,
               sortOrder: semanticRule.sortOrder || 500,
               tabs: [],
@@ -634,6 +699,8 @@
     isManualGroupedTab,
     matchSemanticGroup,
     normalizeHostname,
+    normalizeGroupColor,
     normalizeManualGroupsState,
+    normalizeRuleOverrides,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : self);

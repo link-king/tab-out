@@ -27,6 +27,14 @@ const MESSAGE_TYPES = {
 
 const pendingTabTimers = new Map();
 
+function getLocalRuleOverrides() {
+  return TAB_OUT_RULES.normalizeRuleOverrides({
+    landingPagePatterns: typeof LOCAL_LANDING_PAGE_PATTERNS !== 'undefined' ? LOCAL_LANDING_PAGE_PATTERNS : [],
+    customGroups: typeof LOCAL_CUSTOM_GROUPS !== 'undefined' ? LOCAL_CUSTOM_GROUPS : [],
+    semanticGroups: typeof LOCAL_SEMANTIC_GROUPS !== 'undefined' ? LOCAL_SEMANTIC_GROUPS : [],
+  });
+}
+
 // ─── Badge updater ────────────────────────────────────────────────────────────
 
 async function updateBadge() {
@@ -101,7 +109,7 @@ async function ensureChromeGroup(windowId, spec, tabIds) {
 
   await chrome.tabGroups.update(groupId, {
     title: spec.label,
-    color: spec.color || 'grey',
+    color: TAB_OUT_RULES.normalizeGroupColor(spec.color),
     collapsed: false,
   });
 
@@ -147,17 +155,14 @@ async function groupTabs(tabs, options = {}) {
     tabsByWindow.get(tab.windowId).push(tab);
   }
 
+  const ruleOverrides = getLocalRuleOverrides();
   for (const [windowId, windowTabs] of tabsByWindow.entries()) {
-    const groups = TAB_OUT_RULES.getDashboardGroups(windowTabs, {
-      landingPagePatterns: typeof LOCAL_LANDING_PAGE_PATTERNS !== 'undefined' ? LOCAL_LANDING_PAGE_PATTERNS : [],
-      customGroups: typeof LOCAL_CUSTOM_GROUPS !== 'undefined' ? LOCAL_CUSTOM_GROUPS : [],
-      semanticGroups: typeof LOCAL_SEMANTIC_GROUPS !== 'undefined' ? LOCAL_SEMANTIC_GROUPS : [],
-    });
+    const groups = TAB_OUT_RULES.getDashboardGroups(windowTabs, ruleOverrides);
     for (const group of groups) {
       const spec = {
         key: group.domain,
         label: group.label || TAB_OUT_RULES.friendlyDomain(group.domain),
-        color: group.color || 'grey',
+        color: TAB_OUT_RULES.normalizeGroupColor(group.color),
         isCustom: group.isCustom === true,
       };
       const key = bucketKey(windowId, spec);
@@ -233,7 +238,7 @@ async function applyManualGroupingForUrl(url) {
     const groupIdInChrome = await ensureChromeGroup(windowId, {
       key: 'manual:' + manualGroup.id,
       label: manualGroup.name,
-      color: manualGroup.color || 'grey',
+      color: TAB_OUT_RULES.normalizeGroupColor(manualGroup.color),
       isManual: true,
     }, windowTabs.map(tab => tab.id));
 
@@ -282,6 +287,7 @@ async function getGroupingState() {
   return {
     settings,
     manualGroups: manualGroupsState.groups,
+    ruleOverrides: getLocalRuleOverrides(),
     rules: TAB_OUT_RULES.DEFAULT_SEMANTIC_GROUPS.map(rule => ({
       key: rule.key,
       label: rule.label,
