@@ -174,9 +174,31 @@ async function closeTabsWithQuickReturn(tabIds) {
   const ids = [...new Set((tabIds || []).map(id => Number(id)).filter(Number.isInteger))];
   if (ids.length === 0) return { closed: 0, saved: 0 };
 
-  const snapshots = await rememberTabsForQuickReturn(ids);
-  await closeTabsByIds(ids);
-  return { closed: ids.length, saved: snapshots.length };
+  let snapshots = [];
+  let quickReturnError = '';
+  try {
+    snapshots = await rememberTabsForQuickReturn(ids);
+  } catch (err) {
+    quickReturnError = err && err.message ? err.message : String(err);
+    console.warn('[tab-out] Quick Return backup failed; closing tabs anyway:', err);
+  }
+
+  let liveIds = ids;
+  try {
+    const liveTabs = await chrome.tabs.query({});
+    const liveIdSet = new Set(liveTabs.map(tab => tab.id));
+    liveIds = ids.filter(id => liveIdSet.has(id));
+  } catch {
+    // chrome.tabs.remove will remain the source of truth if the refresh fails.
+  }
+
+  if (liveIds.length === 0) {
+    await fetchOpenTabs();
+    return { closed: 0, saved: snapshots.length, quickReturnError };
+  }
+
+  await closeTabsByIds(liveIds);
+  return { closed: liveIds.length, saved: snapshots.length, quickReturnError };
 }
 
 function tabIdFromElement(el) {
@@ -184,6 +206,36 @@ function tabIdFromElement(el) {
   if (rawId === undefined || rawId === null || rawId === '') return null;
   const tabId = Number(rawId);
   return Number.isInteger(tabId) ? tabId : null;
+}
+
+function tabWindowIdFromElement(el) {
+  const rawId = el && (el.dataset.windowId || el.closest('.page-chip')?.dataset.windowId);
+  if (rawId === undefined || rawId === null || rawId === '') return null;
+  const windowId = Number(rawId);
+  return Number.isInteger(windowId) ? windowId : null;
+}
+
+async function resolveTabForCloseAction(el) {
+  const requestedId = tabIdFromElement(el);
+  const requestedWindowId = tabWindowIdFromElement(el);
+  const requestedUrl = el && (el.dataset.tabUrl || el.closest('.page-chip')?.dataset.tabUrl) || '';
+  const allTabs = await chrome.tabs.query({});
+
+  const exact = requestedId === null ? null : allTabs.find(tab => tab.id === requestedId);
+  if (exact && TAB_OUT_RULES.isRealTabUrl(exact.url)) return exact;
+  if (!requestedUrl) return null;
+
+  const matches = allTabs.filter(tab => (
+    tab.url === requestedUrl && TAB_OUT_RULES.isRealTabUrl(tab.url)
+  ));
+  if (matches.length === 0) return null;
+
+  if (requestedWindowId !== null) {
+    const sameWindow = matches.filter(tab => tab.windowId === requestedWindowId);
+    if (sameWindow.length > 0) return sameWindow.find(tab => tab.active) || sameWindow[0];
+  }
+
+  return matches.find(tab => tab.active) || matches[0];
 }
 
 /**
@@ -1414,6 +1466,7 @@ function renderCurrentTabStrip(tab, group) {
   const groupLabel = group ? getGroupLabel(group) : 'Not grouped yet';
   const faviconUrl = getSafeImageUrl(tab.favIconUrl);
   const tabId = Number.isInteger(tab.id) ? String(tab.id) : '';
+  const windowId = Number.isInteger(tab.windowId) ? String(tab.windowId) : '';
   const domainId = group ? stableDomainId(group.domain) : '';
 
   strip.innerHTML = `
@@ -1427,7 +1480,7 @@ function renderCurrentTabStrip(tab, group) {
     </div>
     <div class="current-tab-actions">
       ${group ? `<button class="action-btn" data-action="show-current-group" data-domain-id="${escapeAttr(domainId)}">Show group</button>` : ''}
-      <button class="action-btn close-tabs" data-action="close-single-tab" data-tab-id="${escapeAttr(tabId)}" data-tab-url="${escapeAttr(tab.url || '')}">
+      <button type="button" class="action-btn close-tabs" data-action="close-single-tab" data-tab-id="${escapeAttr(tabId)}" data-window-id="${escapeAttr(windowId)}" data-tab-url="${escapeAttr(tab.url || '')}">
         ${ICONS.close}
         Close
       </button>
@@ -1835,6 +1888,7 @@ function renderManualGroupMenu(anchor, tabUrl, tabTitle) {
 
 function renderTabActions(tab, safeUrl, safeTitle, manualAction) {
   const safeTabId = Number.isInteger(tab.id) ? String(tab.id) : '';
+  const safeWindowId = Number.isInteger(tab.windowId) ? String(tab.windowId) : '';
   const pauseBlockReason = getPauseBlockReason(tab);
   const pauseTitle = pauseBlockReason || 'Pause tab and release its page memory';
 
@@ -1846,7 +1900,7 @@ function renderTabActions(tab, safeUrl, safeTitle, manualAction) {
     <button class="chip-action chip-save" data-action="defer-single-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" data-tab-title="${safeTitle}" title="Save for later">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" /></svg>
     </button>
-    <button class="chip-action chip-close" data-action="close-single-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" title="Close and keep in Quick Return">
+    <button type="button" class="chip-action chip-close" data-action="close-single-tab" data-tab-url="${safeUrl}" data-tab-id="${safeTabId}" data-window-id="${safeWindowId}" title="Close and keep in Quick Return">
       ${ICONS.close}
     </button>`;
 }
@@ -2648,23 +2702,31 @@ document.addEventListener('click', async (e) => {
   // ---- Close a single tab ----
   if (action === 'close-single-tab') {
     e.stopPropagation(); // don't trigger parent chip's focus-tab
-    const tabUrl = actionEl.dataset.tabUrl;
-    let tabId = tabIdFromElement(actionEl);
-    if (tabId === null && !tabUrl) return;
-
-    if (tabId === null) {
-      const allTabs = await chrome.tabs.query({});
-      const match = allTabs.find(t => t.url === tabUrl);
-      tabId = match && Number.isInteger(match.id) ? match.id : null;
-    }
-    if (tabId === null) return;
-
-    // Preserve a short-lived restore entry before freeing the tab's resources.
+    let targetTab;
     try {
-      await closeTabsWithQuickReturn([tabId]);
+      targetTab = await resolveTabForCloseAction(actionEl);
     } catch (err) {
-      console.error('[tab-out] Failed to save Quick Return item:', err);
-      showToast('Could not save Quick Return; tab was not closed');
+      console.error('[tab-out] Could not resolve tab to close:', err);
+      showToast('Could not find that tab');
+      return;
+    }
+    if (!targetTab || !Number.isInteger(targetTab.id)) {
+      showToast('That tab is already closed');
+      await renderDashboard();
+      return;
+    }
+
+    let closeResult;
+    try {
+      closeResult = await closeTabsWithQuickReturn([targetTab.id]);
+    } catch (err) {
+      console.error('[tab-out] Failed to close tab:', err);
+      showToast('Could not close that tab');
+      return;
+    }
+    if (!closeResult.closed) {
+      showToast('That tab is already closed');
+      await renderDashboard();
       return;
     }
 
@@ -2695,7 +2757,9 @@ document.addEventListener('click', async (e) => {
     const statTabs = document.getElementById('statTabs');
     if (statTabs) statTabs.textContent = getRealTabs().length;
 
-    showToast('Closed · kept in Quick Return for 72 hours');
+    showToast(closeResult.quickReturnError
+      ? 'Closed · Quick Return backup unavailable'
+      : 'Closed · kept in Quick Return for 72 hours');
     await renderDashboard();
     return;
   }
@@ -2800,11 +2864,17 @@ document.addEventListener('click', async (e) => {
     if (!group) return;
 
     const tabIds = group.tabs.map(tab => tab.id);
+    let closeResult;
     try {
-      await closeTabsWithQuickReturn(tabIds);
+      closeResult = await closeTabsWithQuickReturn(tabIds);
     } catch (err) {
-      console.error('[tab-out] Failed to save Quick Return items:', err);
-      showToast('Could not save Quick Return; tabs were not closed');
+      console.error('[tab-out] Failed to close group tabs:', err);
+      showToast('Could not close those tabs');
+      return;
+    }
+    if (!closeResult.closed) {
+      showToast('Those tabs are already closed');
+      await renderDashboard();
       return;
     }
 
@@ -2818,7 +2888,7 @@ document.addEventListener('click', async (e) => {
     if (idx !== -1) domainGroups.splice(idx, 1);
 
     const groupLabel = group.domain === '__landing-pages__' ? 'Homepages' : (group.label || friendlyDomain(group.domain));
-    showToast(`Closed ${tabIds.length} tab${tabIds.length !== 1 ? 's' : ''} from ${groupLabel} · kept in Quick Return`);
+    showToast(`Closed ${closeResult.closed} tab${closeResult.closed !== 1 ? 's' : ''} from ${groupLabel}${closeResult.quickReturnError ? ' · Quick Return backup unavailable' : ' · kept in Quick Return'}`);
 
     const statTabs = document.getElementById('statTabs');
     if (statTabs) statTabs.textContent = getRealTabs().length;
@@ -2865,11 +2935,17 @@ document.addEventListener('click', async (e) => {
   if (action === 'close-all-open-tabs') {
     e.stopPropagation();
     const tabIds = getRealTabs().map(tab => tab.id);
+    let closeResult;
     try {
-      await closeTabsWithQuickReturn(tabIds);
+      closeResult = await closeTabsWithQuickReturn(tabIds);
     } catch (err) {
-      console.error('[tab-out] Failed to save Quick Return items:', err);
-      showToast('Could not save Quick Return; tabs were not closed');
+      console.error('[tab-out] Failed to close all tabs:', err);
+      showToast('Could not close those tabs');
+      return;
+    }
+    if (!closeResult.closed) {
+      showToast('Those tabs are already closed');
+      await renderDashboard();
       return;
     }
     playCloseSound();
@@ -2882,7 +2958,7 @@ document.addEventListener('click', async (e) => {
       animateCardOut(c);
     });
 
-    showToast(`Closed ${tabIds.length} tabs · kept in Quick Return`);
+    showToast(`Closed ${closeResult.closed} tab${closeResult.closed !== 1 ? 's' : ''}${closeResult.quickReturnError ? ' · Quick Return backup unavailable' : ' · kept in Quick Return'}`);
     return;
   }
 });
