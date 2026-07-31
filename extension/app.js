@@ -75,6 +75,9 @@ const GROUPING_MESSAGES = {
   APPLY_MANUAL_GROUPING: 'TAB_OUT_APPLY_MANUAL_GROUPING',
   SET_GROUPS_COLLAPSED: 'TAB_OUT_SET_GROUPS_COLLAPSED',
   OPEN_SIDE_PANEL: 'TAB_OUT_OPEN_SIDE_PANEL',
+  APPEND_QUICK_RETURN: 'TAB_OUT_APPEND_QUICK_RETURN',
+  REMOVE_QUICK_RETURN: 'TAB_OUT_REMOVE_QUICK_RETURN',
+  PRUNE_QUICK_RETURN: 'TAB_OUT_PRUNE_QUICK_RETURN',
 };
 
 function sendRuntimeMessage(message) {
@@ -481,7 +484,8 @@ async function getQuickReturnItems() {
     .slice(0, QUICK_RETURN_MAX_ITEMS);
 
   if (items.length !== stored.length) {
-    await chrome.storage.local.set({ [QUICK_RETURN_STORAGE_KEY]: items });
+    const response = await sendRuntimeMessage({ type: GROUPING_MESSAGES.PRUNE_QUICK_RETURN });
+    if (response && response.ok && Array.isArray(response.items)) return response.items;
   }
   return items;
 }
@@ -525,6 +529,7 @@ async function rememberTabsForQuickReturn(tabIds) {
 
     snapshots.push({
       id: `quick-${closedAtId}-${tab.id}-${index}`,
+      sourceTabId: tab.id,
       url: tab.url,
       title: tab.title || tab.url,
       favIconUrl: getPersistableFaviconUrl(tab.favIconUrl),
@@ -537,54 +542,119 @@ async function rememberTabsForQuickReturn(tabIds) {
   }
 
   if (snapshots.length === 0) return [];
-  const existing = await getQuickReturnItems();
-  const next = [...snapshots, ...existing].slice(0, QUICK_RETURN_MAX_ITEMS);
-  await chrome.storage.local.set({ [QUICK_RETURN_STORAGE_KEY]: next });
+  const response = await sendRuntimeMessage({
+    type: GROUPING_MESSAGES.APPEND_QUICK_RETURN,
+    items: snapshots,
+  });
+  if (!response || !response.ok) {
+    throw new Error(response && response.error || 'Could not save tabs to Quick Return.');
+  }
   return snapshots;
 }
 
-async function removeQuickReturnItem(id) {
-  if (!id) return;
-  const items = await getQuickReturnItems();
-  await chrome.storage.local.set({
-    [QUICK_RETURN_STORAGE_KEY]: items.filter(item => item.id !== id),
+async function removeQuickReturnItems(ids) {
+  const idSet = new Set((ids || []).map(id => String(id || '')).filter(Boolean));
+  if (idSet.size === 0) return 0;
+
+  const response = await sendRuntimeMessage({
+    type: GROUPING_MESSAGES.REMOVE_QUICK_RETURN,
+    ids: [...idSet],
   });
+  if (!response || !response.ok) {
+    throw new Error(response && response.error || 'Could not update Quick Return.');
+  }
+  return Number(response.removed) || 0;
 }
 
-async function restoreQuickReturnItem(id) {
+async function removeQuickReturnItem(id) {
+  return removeQuickReturnItems([id]);
+}
+
+async function restoreQuickReturnItems(ids, { activateFirst = false } = {}) {
+  const requestedIds = [...new Set((ids || []).map(id => String(id || '')).filter(Boolean))];
+  if (requestedIds.length === 0) {
+    return { requested: 0, restored: 0, failed: 0, restoredIds: [], createdTabs: [] };
+  }
+
   const items = await getQuickReturnItems();
-  const item = items.find(candidate => candidate.id === id);
-  if (!item) return null;
+  const itemsById = new Map(items.map(item => [item.id, item]));
+  const candidates = requestedIds.map(id => itemsById.get(id)).filter(Boolean);
+  if (candidates.length === 0) {
+    return { requested: requestedIds.length, restored: 0, failed: requestedIds.length, restoredIds: [], createdTabs: [] };
+  }
 
   const currentWindow = await chrome.windows.getCurrent();
-  const created = await chrome.tabs.create({
-    windowId: currentWindow.id,
-    url: item.url,
-    active: true,
-    pinned: item.pinned === true,
-  });
+  let groups = [];
+  try {
+    groups = await chrome.tabGroups.query({ windowId: currentWindow.id });
+  } catch {
+    groups = [];
+  }
+  const groupIdsByTitle = new Map(
+    groups.filter(group => group.title).map(group => [group.title, group.id])
+  );
+  const restoredIds = [];
+  const createdTabs = [];
 
-  if (!item.pinned && item.group && item.group.title && Number.isInteger(created.id)) {
+  for (const item of candidates) {
+    let created;
     try {
-      const groups = await chrome.tabGroups.query({ windowId: currentWindow.id });
-      const existing = groups.find(group => group.title === item.group.title);
-      const groupId = existing
-        ? await chrome.tabs.group({ groupId: existing.id, tabIds: [created.id] })
-        : await chrome.tabs.group({ tabIds: [created.id] });
-      if (!existing) {
-        await chrome.tabGroups.update(groupId, {
-          title: item.group.title,
-          color: TAB_OUT_RULES.normalizeGroupColor(item.group.color),
-          collapsed: false,
-        });
-      }
+      created = await chrome.tabs.create({
+        windowId: currentWindow.id,
+        url: item.url,
+        active: activateFirst && createdTabs.length === 0,
+        pinned: item.pinned === true,
+      });
     } catch {
-      // The tab is still restored even if Chrome cannot recreate its group.
+      continue;
+    }
+
+    restoredIds.push(item.id);
+    createdTabs.push(created);
+
+    if (!item.pinned && item.group && item.group.title && Number.isInteger(created.id)) {
+      try {
+        const existingGroupId = groupIdsByTitle.get(item.group.title);
+        const groupId = Number.isInteger(existingGroupId)
+          ? await chrome.tabs.group({ groupId: existingGroupId, tabIds: [created.id] })
+          : await chrome.tabs.group({ tabIds: [created.id] });
+        if (!Number.isInteger(existingGroupId)) {
+          await chrome.tabGroups.update(groupId, {
+            title: item.group.title,
+            color: TAB_OUT_RULES.normalizeGroupColor(item.group.color),
+            collapsed: false,
+          });
+          groupIdsByTitle.set(item.group.title, groupId);
+        }
+      } catch {
+        // The tab is still restored even if Chrome cannot recreate its group.
+      }
     }
   }
 
-  await removeQuickReturnItem(id);
-  return created;
+  if (restoredIds.length > 0) await removeQuickReturnItems(restoredIds);
+  return {
+    requested: requestedIds.length,
+    restored: restoredIds.length,
+    failed: requestedIds.length - restoredIds.length,
+    restoredIds,
+    createdTabs,
+  };
+}
+
+async function restoreQuickReturnItem(id) {
+  const result = await restoreQuickReturnItems([id], { activateFirst: true });
+  return result.createdTabs[0] || null;
+}
+
+function quickReturnRestoreMessage(result) {
+  if (result.restored > 0 && result.failed > 0) {
+    return `Restored ${result.restored} tab${result.restored !== 1 ? 's' : ''} · ${result.failed} could not be restored`;
+  }
+  if (result.restored > 0) {
+    return `Restored ${result.restored} tab${result.restored !== 1 ? 's' : ''}`;
+  }
+  return 'Those Quick Return items are no longer available';
 }
 
 async function getManualGroupsState() {
@@ -1239,6 +1309,10 @@ let dashboardRefreshTimer = null;
 let lastCenteredCurrentTabKey = '';
 let liveDashboardRefreshSetup = false;
 let quickReturnExpanded = false;
+let quickReturnCollapsed = true;
+let quickReturnSelectionMode = false;
+let quickReturnSelectedIds = new Set();
+let quickReturnBusy = false;
 let taskManagerHelpVisible = false;
 let backgroundPaletteExpanded = false;
 
@@ -1426,16 +1500,21 @@ function renderResourceSaverStrip() {
   strip.style.display = 'block';
 }
 
-function renderQuickReturnItem(item) {
+function renderQuickReturnItem(item, { selectionMode = false, selected = false } = {}) {
   const title = item.title || item.url || 'Untitled tab';
   const faviconUrl = quickReturnFavicon(item);
   const groupLabel = item.groupLabel || (item.group && item.group.title) || '';
   const isSleeping = item.state === 'sleeping';
+  const isSelectable = selectionMode && !isSleeping;
   const stateLabel = isSleeping ? 'Sleeping' : `Closed ${timeAgo(item.closedAt)}`;
   const metadata = [stateLabel, groupLabel].filter(Boolean).join(' · ');
+  const disabled = quickReturnBusy ? ' disabled' : '';
 
   return `
-    <div class="quick-return-item ${isSleeping ? 'is-sleeping' : 'is-closed'}">
+    <div class="quick-return-item ${isSleeping ? 'is-sleeping' : 'is-closed'}${isSelectable ? ' is-selecting' : ''}${selected ? ' is-selected' : ''}">
+      ${isSelectable
+        ? `<input class="quick-return-checkbox" type="checkbox" data-action="toggle-quick-return-selection" data-quick-return-id="${escapeAttr(item.id)}" aria-label="Select ${escapeAttr(title)}"${selected ? ' checked' : ''}${disabled}>`
+        : ''}
       ${faviconUrl ? `<img class="quick-return-favicon" src="${escapeAttr(faviconUrl)}" alt="" data-hide-on-error data-fallback-icon="${isSleeping ? 'moon' : 'restore'}">` : `<span class="quick-return-favicon-fallback">${isSleeping ? ICONS.moon : ICONS.restore}</span>`}
       <div class="quick-return-copy">
         <div class="quick-return-title" title="${escapeAttr(title)}">${escapeHtml(title)}</div>
@@ -1443,11 +1522,20 @@ function renderQuickReturnItem(item) {
       </div>
       <div class="quick-return-actions">
         ${isSleeping
-          ? `<button class="action-btn compact" data-action="focus-quick-return" data-tab-id="${escapeAttr(item.tabId)}">${ICONS.focus} Open</button>`
-          : `<button class="action-btn compact" data-action="restore-quick-return" data-quick-return-id="${escapeAttr(item.id)}">${ICONS.restore} Restore</button>
-             <button class="quick-return-dismiss" data-action="dismiss-quick-return" data-quick-return-id="${escapeAttr(item.id)}" title="Remove from Quick Return" aria-label="Remove from Quick Return">${ICONS.close}</button>`}
+          ? `<button class="action-btn compact" data-action="focus-quick-return" data-tab-id="${escapeAttr(item.tabId)}"${disabled}>${ICONS.focus} Open</button>`
+          : isSelectable
+            ? ''
+            : `<button class="action-btn compact" data-action="restore-quick-return" data-quick-return-id="${escapeAttr(item.id)}"${disabled}>${ICONS.restore} Restore</button>
+               <button class="quick-return-dismiss" data-action="dismiss-quick-return" data-quick-return-id="${escapeAttr(item.id)}" title="Remove from Quick Return" aria-label="Remove from Quick Return"${disabled}>${ICONS.close}</button>`}
       </div>
     </div>`;
+}
+
+function renderSettingsQuickReturnStatus(itemCount) {
+  const status = document.getElementById('settingsSummaryStatus');
+  if (!status) return;
+  status.hidden = itemCount <= 0;
+  status.textContent = itemCount > 0 ? `${itemCount} in Quick Return` : '';
 }
 
 async function renderQuickReturnPanel() {
@@ -1461,16 +1549,36 @@ async function renderQuickReturnPanel() {
     sortAt: Date.parse(item.closedAt) || 0,
   }));
   const items = [...sleepingItems, ...closedItems];
+  renderSettingsQuickReturnStatus(items.length);
 
   if (items.length === 0) {
     panel.innerHTML = '';
     panel.style.display = 'none';
     quickReturnExpanded = false;
+    quickReturnCollapsed = true;
+    quickReturnSelectionMode = false;
+    quickReturnSelectedIds.clear();
     return 0;
   }
 
-  const visibleLimit = quickReturnExpanded ? items.length : QUICK_RETURN_COLLAPSED_COUNT;
+  const closedIds = new Set(closedItems.map(item => item.id));
+  quickReturnSelectedIds = new Set(
+    [...quickReturnSelectedIds].filter(id => closedIds.has(id))
+  );
+  if (closedItems.length === 0) {
+    quickReturnSelectionMode = false;
+    quickReturnSelectedIds.clear();
+  }
+  if (quickReturnSelectionMode) quickReturnCollapsed = false;
+  if (items.length <= QUICK_RETURN_COLLAPSED_COUNT) quickReturnExpanded = false;
+
+  const showAllItems = quickReturnSelectionMode || quickReturnExpanded;
+  const visibleLimit = showAllItems ? items.length : QUICK_RETURN_COLLAPSED_COUNT;
   const visibleItems = items.slice(0, visibleLimit);
+  const selectedCount = quickReturnSelectedIds.size;
+  const allClosedSelected = closedItems.length > 0 && selectedCount === closedItems.length;
+  const busyDisabled = quickReturnBusy ? ' disabled' : '';
+  const selectionDisabled = selectedCount === 0 || quickReturnBusy ? ' disabled' : '';
   const summaryParts = [];
   if (sleepingItems.length) summaryParts.push(`${sleepingItems.length} sleeping`);
   if (closedItems.length) summaryParts.push(`${closedItems.length} recently closed`);
@@ -1481,14 +1589,48 @@ async function renderQuickReturnPanel() {
         <div class="quick-return-label">Quick Return <span>${items.length}</span></div>
         <div class="quick-return-summary">${escapeHtml(summaryParts.join(' · '))}</div>
       </div>
-      ${items.length > QUICK_RETURN_COLLAPSED_COUNT
-        ? `<button class="quick-return-toggle ${quickReturnExpanded ? 'is-open' : ''}" data-action="toggle-quick-return" aria-expanded="${quickReturnExpanded}">
-             ${ICONS.chevron}
-             ${quickReturnExpanded ? 'Show less' : 'Show more'}
-           </button>`
-        : ''}
+      <div class="quick-return-header-actions">
+        ${closedItems.length
+          ? `<button class="action-btn compact primary quick-return-restore-all" data-action="restore-all-quick-return"${busyDisabled}>${ICONS.restore} ${quickReturnBusy ? 'Working…' : `Restore all ${closedItems.length}`}</button>
+             <button class="action-btn compact quick-return-select-mode" data-action="toggle-quick-return-selection-mode" aria-pressed="${quickReturnSelectionMode}"${busyDisabled}>${quickReturnSelectionMode ? 'Done' : 'Select'}</button>`
+          : ''}
+        <button class="quick-return-toggle quick-return-panel-toggle ${quickReturnCollapsed ? '' : 'is-open'}" data-action="toggle-quick-return-panel" aria-expanded="${!quickReturnCollapsed}" aria-controls="quickReturnBody"${busyDisabled}>
+          ${ICONS.chevron}
+          ${quickReturnCollapsed ? 'Show list' : 'Hide list'}
+        </button>
+      </div>
     </div>
-    <div class="quick-return-list">${visibleItems.map(renderQuickReturnItem).join('')}</div>`;
+    ${quickReturnCollapsed ? '' : `
+      <div class="quick-return-body" id="quickReturnBody">
+        ${quickReturnSelectionMode ? `
+          <div class="quick-return-bulk-bar">
+            <label class="quick-return-select-all">
+              <input type="checkbox" data-action="select-all-quick-return"${allClosedSelected ? ' checked' : ''}${busyDisabled}>
+              <span>Select all ${closedItems.length}</span>
+            </label>
+            <span class="quick-return-selected-count" aria-live="polite">${selectedCount} selected</span>
+            <div class="quick-return-bulk-actions">
+              <button class="action-btn compact" data-action="restore-selected-quick-return"${selectionDisabled}>${ICONS.restore} Restore selected</button>
+              <button class="action-btn compact danger" data-action="remove-selected-quick-return"${selectionDisabled}>${ICONS.close} Remove selected</button>
+            </div>
+          </div>` : ''}
+        <div class="quick-return-list">${visibleItems.map(item => renderQuickReturnItem(item, {
+          selectionMode: quickReturnSelectionMode,
+          selected: quickReturnSelectedIds.has(item.id),
+        })).join('')}</div>
+        ${!quickReturnSelectionMode && items.length > QUICK_RETURN_COLLAPSED_COUNT
+          ? `<div class="quick-return-overflow">
+               <button class="quick-return-toggle ${quickReturnExpanded ? 'is-open' : ''}" data-action="toggle-quick-return-items" aria-expanded="${quickReturnExpanded}"${busyDisabled}>
+                 ${ICONS.chevron}
+                 ${quickReturnExpanded ? 'Show fewer' : `Show all ${items.length}`}
+               </button>
+             </div>`
+          : ''}
+      </div>`}`;
+  panel.classList.toggle('is-collapsed', quickReturnCollapsed);
+  const selectAll = panel.querySelector('[data-action="select-all-quick-return"]');
+  if (selectAll) selectAll.indeterminate = selectedCount > 0 && !allClosedSelected;
+  panel.setAttribute('aria-busy', quickReturnBusy ? 'true' : 'false');
   panel.style.display = 'block';
   return items.length;
 }
@@ -1615,7 +1757,8 @@ function renderBackgroundPalette() {
 
 function renderCustomGroupsPanel() {
   const panel = document.getElementById('customGroupsPanel');
-  if (!panel) return;
+  const appearancePanel = document.getElementById('appearancePanel');
+  if (!panel || !appearancePanel) return;
 
   const groups = manualGroupsState.groups || [];
   const counts = getManualGroupCounts();
@@ -1633,24 +1776,24 @@ function renderCustomGroupsPanel() {
     : '';
 
   panel.innerHTML = `
-    <div class="custom-groups-controls">
-      <div class="custom-group-create">
-        <input id="manualGroupNameInput" class="custom-group-input" type="text" maxlength="40" placeholder="New custom group">
-        <button class="action-btn" data-action="create-manual-group">${ICONS.tabs} Add group</button>
-      </div>
-      <button class="background-palette-toggle${backgroundPaletteExpanded ? ' is-open' : ''}"
-        data-action="toggle-background-palette"
-        aria-expanded="${backgroundPaletteExpanded}"
-        aria-controls="backgroundPalette"
-        title="Change background color">
-          <span class="background-toggle-chip" style="--swatch-bg:${escapeAttr(currentTheme.background)};--swatch-accent:${escapeAttr(currentTheme.accent)}" aria-hidden="true"></span>
-          <span class="background-toggle-label">Background</span>
-          <span class="background-toggle-name">${escapeHtml(currentTheme.name)}</span>
-          ${ICONS.chevron}
-      </button>
+    <div class="custom-group-create">
+      <input id="manualGroupNameInput" class="custom-group-input" type="text" maxlength="40" placeholder="Name a custom group">
+      <button class="action-btn" data-action="create-manual-group">${ICONS.tabs} Add group</button>
     </div>
-    ${backgroundPaletteExpanded ? renderBackgroundPalette() : ''}
     ${groupRows}`;
+
+  appearancePanel.innerHTML = `
+    <button class="background-palette-toggle${backgroundPaletteExpanded ? ' is-open' : ''}"
+      data-action="toggle-background-palette"
+      aria-expanded="${backgroundPaletteExpanded}"
+      aria-controls="backgroundPalette"
+      title="Change background color">
+        <span class="background-toggle-chip" style="--swatch-bg:${escapeAttr(currentTheme.background)};--swatch-accent:${escapeAttr(currentTheme.accent)}" aria-hidden="true"></span>
+        <span class="background-toggle-label">Background</span>
+        <span class="background-toggle-name">${escapeHtml(currentTheme.name)}</span>
+        ${ICONS.chevron}
+    </button>
+    ${backgroundPaletteExpanded ? renderBackgroundPalette() : ''}`;
 }
 
 function closeManualGroupMenus() {
@@ -2033,7 +2176,7 @@ async function renderStaticDashboard() {
   const currentGroup = findGroupForTab(domainGroups, currentActiveTab);
   renderCurrentTabStrip(currentActiveTab, currentGroup);
   renderResourceSaverStrip();
-  const quickReturnCount = await renderQuickReturnPanel();
+  await renderQuickReturnPanel();
 
   // --- Render domain cards ---
   const openTabsSection      = document.getElementById('openTabsSection');
@@ -2041,11 +2184,9 @@ async function renderStaticDashboard() {
   const openTabsSectionCount = document.getElementById('openTabsSectionCount');
   const openTabsSectionTitle = document.getElementById('openTabsSectionTitle');
 
-  if ((domainGroups.length > 0 || quickReturnCount > 0) && openTabsSection) {
-    if (openTabsSectionTitle) openTabsSectionTitle.textContent = domainGroups.length > 0 ? 'Open tabs' : 'Quick Return';
-    openTabsSectionCount.innerHTML = domainGroups.length > 0
-      ? `${domainGroups.length} group${domainGroups.length !== 1 ? 's' : ''} &nbsp;&middot;&nbsp; <button class="action-btn close-tabs" data-action="close-all-open-tabs" style="font-size:11px;padding:3px 10px;">${ICONS.close} Close all ${realTabs.length} tabs</button>`
-      : '';
+  if (domainGroups.length > 0 && openTabsSection) {
+    if (openTabsSectionTitle) openTabsSectionTitle.textContent = 'Open tabs';
+    openTabsSectionCount.innerHTML = `${domainGroups.length} group${domainGroups.length !== 1 ? 's' : ''} &nbsp;&middot;&nbsp; <button class="action-btn close-tabs" data-action="close-all-open-tabs" style="font-size:11px;padding:3px 10px;">${ICONS.close} Close all ${realTabs.length} tabs</button>`;
     openTabsMissionsEl.innerHTML = domainGroups.map(g => renderDomainCard(g)).join('');
     openTabsSection.style.display = 'block';
     centerCurrentTabInSidePanel(currentActiveTab, currentGroup);
@@ -2315,11 +2456,113 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // ---- Show more or fewer recently paused/closed tabs ----
-  if (action === 'toggle-quick-return') {
+  // ---- Expand or collapse the full Quick Return list ----
+  if (action === 'toggle-quick-return-panel') {
     e.stopPropagation();
+    if (quickReturnBusy) return;
+    quickReturnCollapsed = !quickReturnCollapsed;
+    if (quickReturnCollapsed) {
+      quickReturnExpanded = false;
+      quickReturnSelectionMode = false;
+      quickReturnSelectedIds.clear();
+    }
+    await renderQuickReturnPanel();
+    return;
+  }
+
+  // ---- Show all Quick Return items or return to the short list ----
+  if (action === 'toggle-quick-return-items') {
+    e.stopPropagation();
+    if (quickReturnBusy || quickReturnSelectionMode) return;
     quickReturnExpanded = !quickReturnExpanded;
     await renderQuickReturnPanel();
+    return;
+  }
+
+  // ---- Enter or leave multi-select mode for recently closed tabs ----
+  if (action === 'toggle-quick-return-selection-mode') {
+    e.stopPropagation();
+    if (quickReturnBusy) return;
+    quickReturnSelectionMode = !quickReturnSelectionMode;
+    quickReturnCollapsed = false;
+    quickReturnExpanded = quickReturnSelectionMode;
+    if (!quickReturnSelectionMode) quickReturnSelectedIds.clear();
+    await renderQuickReturnPanel();
+    return;
+  }
+
+  // ---- Select or deselect one recently closed tab ----
+  if (action === 'toggle-quick-return-selection') {
+    e.stopPropagation();
+    if (quickReturnBusy) return;
+    const id = actionEl.dataset.quickReturnId;
+    if (!id) return;
+    if (actionEl.checked) quickReturnSelectedIds.add(id);
+    else quickReturnSelectedIds.delete(id);
+    await renderQuickReturnPanel();
+    return;
+  }
+
+  // ---- Select or deselect every recently closed tab ----
+  if (action === 'select-all-quick-return') {
+    e.stopPropagation();
+    if (quickReturnBusy) return;
+    if (actionEl.checked) {
+      const closedItems = await getQuickReturnItems();
+      quickReturnSelectedIds = new Set(closedItems.map(item => item.id));
+    } else {
+      quickReturnSelectedIds.clear();
+    }
+    await renderQuickReturnPanel();
+    return;
+  }
+
+  // ---- Restore all or only the selected recently closed tabs ----
+  if (action === 'restore-all-quick-return' || action === 'restore-selected-quick-return') {
+    e.stopPropagation();
+    if (quickReturnBusy) return;
+    const ids = action === 'restore-all-quick-return'
+      ? (await getQuickReturnItems()).map(item => item.id)
+      : [...quickReturnSelectedIds];
+    if (ids.length === 0) {
+      showToast('Select at least one closed tab');
+      return;
+    }
+
+    quickReturnBusy = true;
+    try {
+      await renderQuickReturnPanel();
+      const result = await restoreQuickReturnItems(ids);
+      result.restoredIds.forEach(id => quickReturnSelectedIds.delete(id));
+      showToast(quickReturnRestoreMessage(result));
+    } catch (err) {
+      console.error('[tab-out] Failed to restore Quick Return items:', err);
+      showToast('Could not restore those tabs');
+    } finally {
+      quickReturnBusy = false;
+      await renderDashboard();
+    }
+    return;
+  }
+
+  // ---- Remove selected closed tabs from Quick Return without opening them ----
+  if (action === 'remove-selected-quick-return') {
+    e.stopPropagation();
+    if (quickReturnBusy || quickReturnSelectedIds.size === 0) return;
+    const ids = [...quickReturnSelectedIds];
+    quickReturnBusy = true;
+    try {
+      await renderQuickReturnPanel();
+      const removed = await removeQuickReturnItems(ids);
+      quickReturnSelectedIds.clear();
+      showToast(`Removed ${removed} tab${removed !== 1 ? 's' : ''} from Quick Return`);
+    } catch (err) {
+      console.error('[tab-out] Failed to remove Quick Return items:', err);
+      showToast('Could not remove those tabs');
+    } finally {
+      quickReturnBusy = false;
+      await renderDashboard();
+    }
     return;
   }
 
@@ -2341,21 +2584,32 @@ document.addEventListener('click', async (e) => {
   // ---- Restore a closed tab to the current window ----
   if (action === 'restore-quick-return') {
     e.stopPropagation();
-    const restored = await restoreQuickReturnItem(actionEl.dataset.quickReturnId);
-    if (!restored) {
-      showToast('That Quick Return item has expired');
+    if (quickReturnBusy) return;
+    quickReturnBusy = true;
+    try {
+      await renderQuickReturnPanel();
+      const restored = await restoreQuickReturnItem(actionEl.dataset.quickReturnId);
+      if (!restored) {
+        showToast('That Quick Return item has expired');
+      } else {
+        showToast('Restored to this window');
+      }
+    } catch (err) {
+      console.error('[tab-out] Failed to restore Quick Return item:', err);
+      showToast('Could not restore that tab');
+    } finally {
+      quickReturnBusy = false;
       await renderDashboard();
-      return;
     }
-    showToast('Restored to this window');
-    await renderDashboard();
     return;
   }
 
   // ---- Remove a closed tab from Quick Return without opening it ----
   if (action === 'dismiss-quick-return') {
     e.stopPropagation();
-    await removeQuickReturnItem(actionEl.dataset.quickReturnId);
+    const id = actionEl.dataset.quickReturnId;
+    await removeQuickReturnItem(id);
+    quickReturnSelectedIds.delete(id);
     await renderQuickReturnPanel();
     showToast('Removed from Quick Return');
     return;

@@ -20,7 +20,7 @@ No server. No account. No tab-data uploads. Just a Chrome extension.
 - **Current tab focus** keeps the page you are looking at visible at the top, moves its group to the front, and centers it in the side panel.
 - **Tab-aware actions** focus, close, or save the exact tab you clicked, even when several tabs share the same URL.
 - **Resource Saver** pauses inactive tabs in place to release page memory while protecting the current, pinned, and audible tabs.
-- **Quick Return** keeps sleeping tabs and tabs closed through Tab Out at the top for fast reopening, with up to 200 closed tabs retained locally for 72 hours.
+- **Quick Return** keeps sleeping and recently closed tabs easy to reach without taking over the page. Tabs closed from Chrome or Tab Out are captured automatically; collapse the list, restore everything in one click, or select closed tabs to restore or remove in bulk. Up to 200 closed tabs are retained locally for 72 hours.
 - **33 Dunhuang background colors** let you switch the dashboard palette from a compact, collapsible color picker, with your choice saved locally.
 - **Local override hooks** for personal homepage, semantic, and custom rules without changing the main extension code.
 
@@ -48,7 +48,7 @@ The agent will walk you through it. Takes about 1 minute.
 - **One-click controls** group tabs now, expand all groups, collapse all groups, or open Tab Out in the side panel
 - **Current tab strip** shows the active page and its group, with a shortcut to jump to that group or close only that tab
 - **Resource Saver** pauses safe inactive tabs with `chrome.tabs.discard`, while current, pinned, and audio-playing tabs stay awake
-- **Quick Return** puts sleeping and recently closed tabs in one easy-to-find list instead of burying them in browser history, keeping up to 200 closed items for 72 hours
+- **Quick Return** automatically captures tabs closed from Chrome or Tab Out, then puts them beside sleeping tabs in one collapsible list with restore-all and multi-select restore/remove actions for up to 200 closed items retained for 72 hours
 - **33 Dunhuang background colors** provide a compact appearance picker that remembers your selected palette
 - **Group-aware restore** reopens a recently closed tab in its previous Chrome group when possible
 - **Chrome Task Manager guide** shows Mac users the correct menu path for live CPU diagnosis instead of opening a blocked `chrome://` page or showing guessed percentages

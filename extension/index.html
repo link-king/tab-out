@@ -13,7 +13,7 @@
 
 
   <!-- ================================================================
-       HEADER — greeting on the left
+       HEADER — greeting
        ================================================================ -->
   <header>
     <div class="header-left">
@@ -22,18 +22,59 @@
       <!-- "Friday, April 4, 2026" — written by getDateDisplay() in app.js -->
       <div class="date" id="dateDisplay"></div>
     </div>
-    <div class="header-actions">
-      <label class="auto-group-toggle" title="Automatically place Chrome tabs into native tab groups">
-        <input type="checkbox" id="autoGroupToggle" data-action="toggle-auto-group">
-        <span class="toggle-track" aria-hidden="true"></span>
-        <span id="autoGroupLabel">Auto groups</span>
-      </label>
-      <button class="action-btn primary" data-action="group-tabs-now" title="Group open tabs">Group now</button>
-      <button class="action-btn" data-action="expand-tab-groups" title="Expand all tab groups in this window">Expand</button>
-      <button class="action-btn" data-action="collapse-tab-groups" title="Collapse all tab groups in this window">Collapse</button>
-      <button class="action-btn" data-action="open-side-panel" title="Open side panel">Panel</button>
-    </div>
   </header>
+
+  <!-- ================================================================
+       SETTINGS — configuration stays out of the Open tabs workspace
+       ================================================================ -->
+  <details class="settings-panel" id="settingsPanel">
+    <summary class="settings-summary">
+      <span class="settings-title">Settings</span>
+      <span class="settings-summary-hint" aria-hidden="true">
+        <span class="settings-hint-closed">Show more settings</span>
+        <span class="settings-hint-open">Hide settings</span>
+      </span>
+      <span class="settings-line" aria-hidden="true"></span>
+      <span class="settings-summary-status" id="settingsSummaryStatus" hidden></span>
+      <svg class="settings-chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m6 9 6 6 6-6"></path>
+      </svg>
+    </summary>
+    <div class="settings-body">
+      <section class="settings-row" aria-labelledby="groupingSettingsLabel">
+        <div class="settings-row-label" id="groupingSettingsLabel">Tab groups</div>
+        <div class="header-actions settings-row-content settings-group-controls">
+          <label class="auto-group-toggle" title="Automatically place Chrome tabs into native tab groups">
+            <input type="checkbox" id="autoGroupToggle" data-action="toggle-auto-group">
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span id="autoGroupLabel">Auto groups</span>
+          </label>
+          <div class="settings-group-actions">
+            <button class="action-btn primary" data-action="group-tabs-now" title="Group open tabs">Group now</button>
+            <button class="action-btn" data-action="expand-tab-groups" title="Expand all tab groups in this window">Expand</button>
+            <button class="action-btn" data-action="collapse-tab-groups" title="Collapse all tab groups in this window">Collapse</button>
+            <button class="action-btn" data-action="open-side-panel" title="Open side panel">Panel</button>
+          </div>
+        </div>
+      </section>
+      <section class="settings-row settings-resource-row" aria-labelledby="resourceSettingsLabel">
+        <div class="settings-row-label" id="resourceSettingsLabel">Resource saver</div>
+        <div class="resource-saver-strip settings-row-content" id="resourceSaverStrip" style="display:none"></div>
+      </section>
+      <section class="settings-row settings-quick-return-row" aria-labelledby="quickReturnSettingsLabel">
+        <div class="settings-row-label" id="quickReturnSettingsLabel">Quick Return</div>
+        <div class="quick-return-panel settings-row-content" id="quickReturnPanel" style="display:none"></div>
+      </section>
+      <section class="settings-row settings-custom-groups-row" aria-labelledby="customGroupsSettingsLabel">
+        <div class="settings-row-label" id="customGroupsSettingsLabel">Custom groups</div>
+        <div class="custom-groups-panel settings-row-content" id="customGroupsPanel"></div>
+      </section>
+      <section class="settings-row settings-appearance-row" aria-labelledby="appearanceSettingsLabel">
+        <div class="settings-row-label" id="appearanceSettingsLabel">Appearance</div>
+        <div class="appearance-panel settings-row-content" id="appearancePanel"></div>
+      </section>
+    </div>
+  </details>
 
   <!-- ================================================================
        TAB OUT DUPES BANNER — appears when you have extra Tab Out tabs open
@@ -69,9 +110,6 @@
         <div class="section-count" id="openTabsSectionCount"></div>
       </div>
       <div class="current-tab-strip" id="currentTabStrip" style="display:none"></div>
-      <div class="resource-saver-strip" id="resourceSaverStrip" style="display:none"></div>
-      <div class="quick-return-panel" id="quickReturnPanel" style="display:none"></div>
-      <div class="custom-groups-panel" id="customGroupsPanel"></div>
       <div class="missions" id="openTabsMissions"></div>
     </div>
 
