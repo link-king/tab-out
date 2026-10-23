@@ -1,0 +1,58 @@
+name: linear-issue-id
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+# Title and body edits each trigger a run; keep only the newest per PR.
+concurrency:
+  group: linear-issue-id-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate-linear-issue-id:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require one Linear issue in the branch, title and body
+        # Linux caps one environment string at 128 KiB; PR bodies here stay far below it.
+        env:
+          PR_BRANCH: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        shell: bash
+        run: |
+          # Byte-wise matching: case folding and [:alnum:] touch only ASCII, and
+          # the macOS /bin/bash 3.2 on self-hosted runners behaves like Linux.
+          export LC_ALL=C
+          lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+          branch=$(lower "$PR_BRANCH")
+          title=$(lower "$PR_TITLE")
+          body=$(lower "$PR_BODY")
+
+          branch_re='^(codex|claude)/you-([1-9][0-9]*)-'
+          if [[ ! $branch =~ $branch_re ]]; then
+            echo '::error::Branch must be claude/YOU-123-<slug> or codex/YOU-123-<slug>. Renaming a branch closes its PR, so push the work to a new branch and open a new PR.'
+            exit 1
+          fi
+          number=${BASH_REMATCH[2]}
+
+          status=0
+          title_re="(^|[^[:alnum:]_])you-$number([^[:alnum:]_]|$)"
+          if [[ ! $title =~ $title_re ]]; then
+            echo "::error::PR title must include YOU-$number, the issue in the branch name, for example [YOU-$number] Describe the change."
+            status=1
+          fi
+          body_re="(^|[^[:alnum:]_])fixes[[:space:]]+you-$number([^[:alnum:]_]|$)"
+          if [[ ! $body =~ $body_re ]]; then
+            echo "::error::PR body must include 'Fixes YOU-$number' for the issue in the branch name. Refer to a parent issue only as 'Related to YOU-<parent>'. See .github/pull_request_template.md."
+            status=1
+          fi
+          if [[ $status -eq 0 ]]; then
+            echo "Branch, title and body all name YOU-$number."
+          else
+            echo "::notice::Editing the PR title or body re-runs this check. 'Re-run jobs' checks the old title and body again."
+          fi
+          exit "$status"
