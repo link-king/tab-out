@@ -40,14 +40,23 @@ jobs:
           number=${BASH_REMATCH[2]}
 
           status=0
-          title_re="(^|[^[:alnum:]_])you-$number([^[:alnum:]_]|$)"
+          title_re="^[[:space:]]*\[?you-$number([^[:alnum:]_]|$)"
           if [[ ! $title =~ $title_re ]]; then
-            echo "::error::PR title must include YOU-$number, the issue in the branch name, for example [YOU-$number] Describe the change."
+            echo "::error::PR title must start with YOU-$number, the issue in the branch name, for example [YOU-$number] Describe the change."
             status=1
           fi
           body_re="(^|[^[:alnum:]_])fixes[[:space:]]+you-$number([^[:alnum:]_]|$)"
           if [[ ! $body =~ $body_re ]]; then
             echo "::error::PR body must include 'Fixes YOU-$number' for the issue in the branch name. Refer to a parent issue only as 'Related to YOU-<parent>'. See .github/pull_request_template.md."
+            status=1
+          fi
+          # Linear closes every issue named after one of its closing words, including
+          # lists such as "Fixes YOU-1, YOU-2 and YOU-3"; only the branch issue may be closed.
+          closing='(close[sd]?|closing|fix(e[sd])?|fixing|resolve[sd]?|resolving|complete[sd]?|completing|implement(s|ed|ing)?)'
+          refs_re="(^|[^[:alnum:]_])$closing[[:space:]:]+you-[0-9]+([[:space:]]*(,|and|&)[[:space:]]*you-[0-9]+)*"
+          others=$(printf '%s\n' "$body" | grep -oE "$refs_re" | grep -oE 'you-[0-9]+' | grep -vx "you-$number" | sort -u | tr '[:lower:]' '[:upper:]' | tr '\n' ' ' || true)
+          if [[ -n $others ]]; then
+            echo "::error::PR body puts a closing word (close, fix, resolve, complete, implement) before ${others% }. Only YOU-$number may be closed by this PR; refer to a parent issue as 'Related to YOU-<parent>'."
             status=1
           fi
           if [[ $status -eq 0 ]]; then
