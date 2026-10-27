@@ -32,9 +32,9 @@ jobs:
           title=$(lower "$PR_TITLE")
           body=$(lower "$PR_BODY")
 
-          branch_re='^(codex|claude)/you-([1-9][0-9]*)-[a-z0-9]'
+          branch_re='^(codex|claude|cline|agy)/you-([1-9][0-9]*)-[a-z0-9]'
           if [[ ! $branch =~ $branch_re ]]; then
-            echo '::error::Branch must be claude/YOU-123-<slug> or codex/YOU-123-<slug>. Renaming a branch closes its PR, so push the work to a new branch and open a new PR.'
+            echo '::error::Branch must be claude/YOU-123-<slug>, codex/YOU-123-<slug>, cline/YOU-123-<slug> or agy/YOU-123-<slug>. Renaming a branch closes its PR, so push the work to a new branch and open a new PR.'
             exit 1
           fi
           number=${BASH_REMATCH[2]}
